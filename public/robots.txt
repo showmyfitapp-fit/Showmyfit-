@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://showmyfit.com/sitemap.xml
+
+# Disallow admin and private areas
+Disallow: /admin/
+Disallow: /admin/*
+Disallow: /seller/dashboard
+Disallow: /shop/dashboard
+Disallow: /api/
+Disallow: /_next/
+Disallow: /node_modules/
+
+# Allow important pages
+Allow: /
+Allow: /browse
+Allow: /categories
+Allow: /about
+Allow: /privacy
+Allow: /terms
+Allow: /login
+Allow: /auth
+Allow: /shop/auth
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
+
+# Host declaration
+Host: https://showmyfit.com
