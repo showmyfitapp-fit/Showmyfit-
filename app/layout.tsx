@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
@@ -7,13 +7,17 @@ import AppLayout from '@/components/layout/AppLayout';
 
 const inter = Inter({ subsets: ['latin'] });
 
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#9333EA',
+};
+
 export const metadata: Metadata = {
     title: 'ShowMyFIT - Nearby Store | Shop from Nearby Stores Online',
     description: 'Discover and shop from amazing nearby stores in your area. ShowMyFIT connects you with nearby businesses offering fashion, electronics, home goods, and more. Support your community while finding great deals!',
     keywords: 'nearby store, online shopping, nearby stores, community shopping, fashion, electronics, home goods, local business, ShowMyFIT, store finder',
     authors: [{ name: 'ShowMyFIT' }],
-    viewport: 'width=device-width, initial-scale=1',
-    themeColor: '#9333EA',
     robots: 'index, follow',
     alternates: {
         canonical: 'https://showmyfit.com/',
