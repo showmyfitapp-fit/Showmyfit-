@@ -3,38 +3,45 @@ import Image from 'next/image';
 interface ShowMyFITLogoProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /** Invert white logo for light backgrounds (navbar, etc.) */
+  invert?: boolean;
 }
 
-const ShowMyFITLogo: React.FC<ShowMyFITLogoProps> = ({ size = 'md', className = '' }) => {
-  const sizeClasses = {
-    sm: 'h-8 w-24',     // Added widths for better Image component behavior
-    md: 'h-10 w-32',
-    lg: 'h-12 w-40'
-  };
+const sizeConfig = {
+  sm: {
+    box: 'h-8 w-28',
+    scale: 'scale-[2.8]',
+  },
+  md: {
+    box: 'h-10 w-36 md:h-11 md:w-40',
+    scale: 'scale-[3]',
+  },
+  lg: {
+    box: 'h-12 w-44 md:h-14 md:w-52',
+    scale: 'scale-[3.2]',
+  },
+};
 
-  const textSizeClasses = {
-    sm: 'text-lg',
-    md: 'text-xl',
-    lg: 'text-2xl'
-  };
+const ShowMyFITLogo: React.FC<ShowMyFITLogoProps> = ({
+  size = 'md',
+  className = '',
+  invert = true,
+}) => {
+  const { box, scale } = sizeConfig[size];
 
   return (
-    <div className={`relative ${sizeClasses[size]} ${className} flex items-center justify-center shrink-0`}>
+    <div
+      className={`relative shrink-0 overflow-hidden flex items-center justify-center ${box}`}
+      aria-label="ShowMyFIT"
+    >
       <Image
         src="/assets/showmyfit-logo.png"
         alt="ShowMyFIT"
-        width={160}
-        height={48}
+        width={500}
+        height={500}
         priority
-        className="object-contain max-w-full max-h-full"
+        className={`h-full w-full object-contain origin-center ${scale} ${invert ? 'invert' : ''} ${className}`}
       />
-      {/* Fallback text logo */}
-      <div
-        className={`${textSizeClasses[size]} font-bold text-white hidden ${className}`}
-        style={{ display: 'none' }}
-      >
-        ShowMyFIT
-      </div>
     </div>
   );
 };

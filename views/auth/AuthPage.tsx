@@ -212,7 +212,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
           </p>
 
           <div className="pt-8 text-center">
-            <Link href="/shop/auth" className="text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors uppercase tracking-widest">
+            <Link href="/become-seller" className="text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors uppercase tracking-widest">
               Become a Seller
             </Link>
           </div>

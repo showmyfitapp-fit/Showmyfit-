@@ -222,7 +222,7 @@ const GoogleMapLocation: React.FC<GoogleMapLocationProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-[5px]">
       {isEditing && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">

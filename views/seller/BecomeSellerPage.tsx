@@ -8,7 +8,7 @@ import {
   CreditCard, Headphones, Zap, Globe, Award, Phone, Mail, MapPin,
   Upload, Building, FileText, DollarSign, LogIn, Clock, XCircle, AlertCircle
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
 import Button from '@/components/ui/Button';
 import GoogleMapLocation from '@/components/common/GoogleMapLocation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -307,8 +307,7 @@ const BecomeSellerPage: React.FC = () => {
       case 'pending':
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            <Navbar userRole="user" />
-            <div className="main-content pt-24">
+            <div className="main-content pt-0">
               <section className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white py-16">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                   <Clock className="w-16 h-16 mx-auto mb-6 text-yellow-300" />
@@ -319,7 +318,7 @@ const BecomeSellerPage: React.FC = () => {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
                     <Link href="/">
-                      <Button variant="secondary" size="lg" className="bg-white text-yellow-600 hover:bg-yellow-50">
+                      <Button variant="secondary" size="lg" className="bg-white text-black hover:bg-yellow-50">
                         <ArrowLeft className="w-5 h-5 mr-2" />
                         Back to Home
                       </Button>
@@ -328,14 +327,14 @@ const BecomeSellerPage: React.FC = () => {
                 </div>
               </section>
             </div>
+            <Footer />
           </div>
         );
 
       case 'approved':
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            <Navbar userRole="user" />
-            <div className="main-content pt-24">
+            <div className="main-content pt-0">
               <section className="bg-gradient-to-r from-green-500 to-emerald-500 text-white py-16">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                   <CheckCircle className="w-16 h-16 mx-auto mb-6 text-green-300" />
@@ -352,7 +351,7 @@ const BecomeSellerPage: React.FC = () => {
                       </Button>
                     </Link>
                     <Link href="/">
-                      <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-green-600">
+                      <Button variant="outline" size="lg" className="border-white text-black hover:bg-white hover:text-green-600">
                         <ArrowLeft className="w-5 h-5 mr-2" />
                         Back to Home
                       </Button>
@@ -361,14 +360,14 @@ const BecomeSellerPage: React.FC = () => {
                 </div>
               </section>
             </div>
+            <Footer />
           </div>
         );
 
       case 'rejected':
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            <Navbar userRole="user" />
-            <div className="main-content pt-24">
+            <div className="main-content pt-0">
               <section className="bg-gradient-to-r from-red-500 to-pink-500 text-white py-16">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                   <XCircle className="w-16 h-16 mx-auto mb-6 text-red-300" />
@@ -394,7 +393,7 @@ const BecomeSellerPage: React.FC = () => {
                       Apply Again
                     </Button>
                     <Link href="/">
-                      <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-red-600">
+                      <Button variant="outline" size="lg" className="border-white text-black hover:bg-white hover:text-red-600">
                         <ArrowLeft className="w-5 h-5 mr-2" />
                         Back to Home
                       </Button>
@@ -403,6 +402,7 @@ const BecomeSellerPage: React.FC = () => {
                 </div>
               </section>
             </div>
+            <Footer />
           </div>
         );
 
@@ -420,9 +420,7 @@ const BecomeSellerPage: React.FC = () => {
   if (!loading && !currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <Navbar userRole="user" />
-
-        <div className="main-content pt-24">
+        <div className="main-content pt-0">
           <section className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-16">
             <div className="max-w-4xl mx-auto px-4 text-center">
               <LogIn className="w-16 h-16 mx-auto mb-6 text-yellow-300" />
@@ -441,7 +439,7 @@ const BecomeSellerPage: React.FC = () => {
                   </Button>
                 </Link>
                 <Link href="/">
-                  <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-blue-600">
+                  <Button variant="outline" size="lg" className="border-white text-black hover:bg-white hover:text-blue-600">
                     <ArrowLeft className="w-5 h-5 mr-2" />
                     Back to Home
                   </Button>
@@ -450,15 +448,14 @@ const BecomeSellerPage: React.FC = () => {
             </div>
           </section>
         </div>
+        <Footer />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <Navbar userRole="user" />
-
-      <div className="main-content pt-24">
+      <div className="main-content pt-0">
         {/* Registration Form - Moved to Top */}
         <section className="py-16 bg-gray-50">
           <div className="max-w-4xl mx-auto px-4">
@@ -963,7 +960,7 @@ const BecomeSellerPage: React.FC = () => {
         {/* Stats Section */}
         <section className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="text-4xl font-bold text-blue-600 mb-2">Active Sellers</div>
                 <div className="text-gray-600">Join our community</div>
@@ -975,10 +972,6 @@ const BecomeSellerPage: React.FC = () => {
               <div className="text-center">
                 <div className="text-4xl font-bold text-green-600 mb-2">Happy Customers</div>
                 <div className="text-gray-600">Serve our community</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold text-orange-600 mb-2">Reliable</div>
-                <div className="text-gray-600">Platform uptime</div>
               </div>
             </div>
           </div>
@@ -1015,6 +1008,7 @@ const BecomeSellerPage: React.FC = () => {
           </div>
         </section>
       </div>
+      <Footer />
     </div>
   );
 };

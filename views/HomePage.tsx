@@ -1140,7 +1140,7 @@ const HomePage: React.FC = () => {
 
         {/* Random Products - Mobile Optimized */}
         <section className="py-6 md:py-8 bg-white">
-          <div className="px-4">
+          <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <h2 className="text-xl md:text-2xl font-bold text-gray-900">Random Products</h2>
               <button
@@ -1201,7 +1201,7 @@ const HomePage: React.FC = () => {
 
         {/* Recently Viewed - Mobile Optimized */}
         <section className="py-6 md:py-8 bg-white">
-          <div className="px-4">
+          <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <h2 className="text-xl md:text-2xl font-bold text-gray-900">Recently Viewed</h2>
               <button

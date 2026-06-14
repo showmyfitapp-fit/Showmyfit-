@@ -370,7 +370,7 @@ const ProfilePage: React.FC = () => {
             <h3 className="text-xl font-black mb-1">Become a Seller</h3>
             <p className="text-gray-400 text-sm font-medium mb-4 max-w-[200px]">Start selling your products on ShowMyFit today.</p>
             <Link
-              href="/shop/auth"
+              href="/become-seller"
               className="inline-block bg-white text-black px-6 py-2.5 rounded-full text-sm font-bold hover:bg-gray-100 transition-colors"
             >
               Apply Now

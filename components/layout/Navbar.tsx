@@ -183,7 +183,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
                   <Menu className="w-6 h-6 text-gray-900" />
                 </button>
                 <Link href="/" className="flex-shrink-0">
-                  <ShowMyFITLogo size="md" className="text-gray-900" />
+                  <ShowMyFITLogo size="md" />
                 </Link>
               </div>
 
@@ -270,7 +270,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
             <div className="flex items-center gap-2 sm:gap-4">
               {/* Seller Link */}
               <Link
-                href="/shop/auth"
+                href="/become-seller"
                 className="hidden xl:flex items-center gap-2 px-4 py-2 rounded-full bg-black text-white text-xs font-bold hover:bg-gray-800 transition-all hover:scale-105 active:scale-95"
               >
                 <Store className="w-4 h-4" />
@@ -300,7 +300,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
               {/* Profile - Replaces Logout/Hi Name */}
               <Link
                 href={currentUser ? "/profile" : "/login"}
-                className="flex items-center gap-3 p-1 rounded-full hover:bg-white border border-transparent hover:border-neutral-100 hover:shadow-xl transition-all duration-300 group"
+                className="flex items-center gap-3 p-1 rounded-full hover:bg-white hover:p-2 hover:rounded-[20px] border border-transparent hover:border-neutral-100 hover:shadow-xl transition-all duration-300 group"
               >
                 <div className="relative w-10 h-10 rounded-xl bg-neutral-100 text-neutral-600 flex items-center justify-center overflow-hidden border border-neutral-200 transition-transform group-hover:rotate-3 group-hover:scale-110">
                   {currentUser && currentUser.photoURL ? (
