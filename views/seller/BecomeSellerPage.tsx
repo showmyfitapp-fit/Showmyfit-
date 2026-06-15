@@ -50,6 +50,7 @@ const BecomeSellerPage: React.FC = () => {
     location: null as { lat: number; lng: number; address?: string } | null,
 
     // Documents
+    panNumber: '',
     gstNumber: '',
 
     // Categories
@@ -184,8 +185,8 @@ const BecomeSellerPage: React.FC = () => {
         validationErrors.push('Business Address is required');
       }
 
-      if (!formData.gstNumber?.trim()) {
-        validationErrors.push('GSTIN Number is required');
+      if (!formData.panNumber?.trim()) {
+        validationErrors.push('PAN Card Number is required');
       }
 
       // Validate location
@@ -236,7 +237,8 @@ const BecomeSellerPage: React.FC = () => {
 
         // Documents
         documents: {
-          gst: formData.gstNumber
+          pan: formData.panNumber,
+          gst: formData.gstNumber || ''
         },
 
         // Categories
@@ -807,20 +809,38 @@ const BecomeSellerPage: React.FC = () => {
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2.5">
-                        GSTIN Number <span className="text-red-500">*</span>
+                        PAN Card Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="panNumber"
+                        value={formData.panNumber}
+                        onChange={handleInputChange}
+                        required
+                        maxLength={10}
+                        className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 shadow-sm hover:shadow-md uppercase"
+                        placeholder="ABCDE1234F"
+                      />
+                      <p className="text-xs text-gray-500 mt-2 flex items-center">
+                        <Shield className="w-3 h-3 mr-1" />
+                        Required for identity verification
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2.5">
+                        GSTIN Number <span className="text-gray-400 font-normal">(optional)</span>
                       </label>
                       <input
                         type="text"
                         name="gstNumber"
                         value={formData.gstNumber}
                         onChange={handleInputChange}
-                        required
                         className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400 shadow-sm hover:shadow-md"
                         placeholder="22ABCDE1234F1Z5"
                       />
                       <p className="text-xs text-gray-500 mt-2 flex items-center">
                         <Shield className="w-3 h-3 mr-1" />
-                        Required for tax compliance
+                        Provide if your business is GST registered
                       </p>
                     </div>
                   </div>
