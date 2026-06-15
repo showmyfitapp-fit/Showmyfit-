@@ -46,7 +46,7 @@ interface Order {
     price: number;
     image: string;
   }>;
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+  status: 'placed' | 'accepted' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'confirmed' | 'shipped' | 'pending' | 'refunded';
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   paymentMethod: string;
   subtotal: number;
@@ -99,12 +99,21 @@ const OrderManagementPage: React.FC = () => {
         orderBy('createdAt', 'desc')
       );
       const snapshot = await getDocs(ordersQuery);
-      const ordersData = snapshot.docs.map(doc => ({
+      const ordersData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
         id: doc.id,
-        ...doc.data(),
+        ...data,
+        orderNumber: data.orderNumber || `ORD-${doc.id.slice(0, 6).toUpperCase()}`,
+        customerName: data.customerName || 'Customer',
+        customerEmail: data.customerEmail || '',
+        customerPhone: data.customerPhone || '',
+        status: data.status || data.orderStatus || 'placed',
+        total: data.total ?? data.totalAmount ?? 0,
         createdAt: doc.data().createdAt?.toDate() || new Date(),
         updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as Order[];
+      };
+      }) as Order[];
       setOrders(ordersData);
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -152,8 +161,12 @@ const OrderManagementPage: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'delivered': return 'bg-green-100 text-green-800';
+      case 'out_for_delivery':
       case 'shipped': return 'bg-blue-100 text-blue-800';
+      case 'packed':
       case 'confirmed': return 'bg-yellow-100 text-yellow-800';
+      case 'accepted': return 'bg-indigo-100 text-indigo-800';
+      case 'placed':
       case 'pending': return 'bg-gray-100 text-gray-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       case 'refunded': return 'bg-purple-100 text-purple-800';

@@ -15,6 +15,10 @@ import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc } fro
 import { db } from '@/firebase/config';
 import FastImage from '@/components/common/FastImage';
 import ShareButton from '@/components/common/ShareButton';
+import ProductSEO from '@/components/seo/ProductSEO';
+import Breadcrumbs from '@/components/common/Breadcrumbs';
+import { useCategories } from '@/hooks/useCategories';
+import { getProductPath } from '@/utils/productUrls';
 
 interface Product {
   id: string;
@@ -23,6 +27,11 @@ interface Product {
   price: number;
   originalPrice?: number;
   category: string;
+  subcategory?: string;
+  subcategoryName?: string;
+  categoryPath?: string[];
+  slug?: string;
+  searchKeywords?: string[];
   brand: string;
   image: string;
   images?: string[];
@@ -63,21 +72,20 @@ interface Seller {
 
 const ProductDetailPage: React.FC = () => {
   const params = useParams();
-  const productId = params?.productId as string;
+  const identifier = (params?.slug ?? params?.productId) as string;
 
   useEffect(() => {
     console.log('=== ProductDetailPage Mounted ===');
     console.log('Params:', params);
-    console.log('ProductId from params:', productId);
-    console.log('ProductId type:', typeof productId);
-    console.log('ProductId exists:', !!productId);
+    console.log('Product identifier:', identifier);
     console.log('================================');
-  }, [params, productId]);
+  }, [params, identifier]);
 
   const router = useRouter();
+  const { currentUser } = useAuth();
   const { addToCart, cartItems, updateQuantity } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  const { currentUser } = useAuth();
+  const { getCategory } = useCategories();
   const [product, setProduct] = useState<Product | null>(null);
   const [seller, setSeller] = useState<Seller | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,13 +115,13 @@ const ProductDetailPage: React.FC = () => {
 
   // Fetch reviews function (extracted for reuse)
   const fetchReviews = async () => {
-    if (!productId) return;
+    if (!product?.id) return;
 
     setLoadingReviews(true);
     try {
       const reviewsQuery = query(
         collection(db, 'reviews'),
-        where('productId', '==', productId)
+        where('productId', '==', product.id)
       );
       const reviewsSnapshot = await getDocs(reviewsQuery);
 
@@ -148,17 +156,17 @@ const ProductDetailPage: React.FC = () => {
   useEffect(() => {
     fetchReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId]);
+  }, [product?.id]);
 
   // Submit review function
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId || !reviewForm.comment.trim()) return;
+    if (!product?.id || !reviewForm.comment.trim()) return;
 
     setSubmittingReview(true);
     try {
       const reviewData = {
-        productId: productId,
+        productId: product.id,
         userId: currentUser?.uid || 'anonymous',
         userName: reviewForm.userName || 'Anonymous',
         rating: reviewForm.rating,
@@ -230,22 +238,34 @@ const ProductDetailPage: React.FC = () => {
   // Fetch product data
   useEffect(() => {
     const fetchProduct = async () => {
-      if (!productId) {
-        console.log('ProductDetailPage: No productId provided, skipping fetch');
+      if (!identifier) {
+        console.log('ProductDetailPage: No product identifier provided, skipping fetch');
         return;
       }
 
-      console.log('ProductDetailPage: Fetching product with ID:', productId);
+      console.log('ProductDetailPage: Fetching product:', identifier);
       setLoading(true);
       try {
-        const productDoc = await getDoc(doc(db, 'products', productId));
+        const productDoc = await getDoc(doc(db, 'products', identifier));
+        let resolvedDoc = productDoc;
 
-        if (productDoc.exists()) {
+        if (!productDoc.exists()) {
+          const slugQuery = query(
+            collection(db, 'products'),
+            where('slug', '==', identifier)
+          );
+          const slugSnapshot = await getDocs(slugQuery);
+          if (!slugSnapshot.empty) {
+            resolvedDoc = slugSnapshot.docs[0];
+          }
+        }
+
+        if (resolvedDoc.exists()) {
           console.log('ProductDetailPage: Product found in Firestore');
-          const productData = productDoc.data();
+          const productData = resolvedDoc.data();
 
           const productInfo = {
-            id: productDoc.id,
+            id: resolvedDoc.id,
             ...productData,
             createdAt: productData.createdAt?.toDate() || new Date(),
             updatedAt: productData.updatedAt?.toDate() || new Date()
@@ -278,7 +298,7 @@ const ProductDetailPage: React.FC = () => {
             }
           }
         } else {
-          console.error('ProductDetailPage: Product not found in Firestore for ID:', productId);
+          console.error('ProductDetailPage: Product not found for:', identifier);
           setError(true);
         }
       } catch (error) {
@@ -291,7 +311,7 @@ const ProductDetailPage: React.FC = () => {
     };
 
     fetchProduct();
-  }, [productId, router]); // Removed router.push dependency which is unstable
+  }, [identifier, router]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -393,9 +413,38 @@ const ProductDetailPage: React.FC = () => {
   }
 
   const discountPercentage = getDiscountPercentage();
+  const categoryDoc = product.category ? getCategory(product.category, null) : undefined;
+  const subcategoryDoc = product.subcategory
+    ? getCategory(product.subcategory, product.category)
+    : undefined;
+
+  const breadcrumbItems = [
+    { name: 'Home', href: '/' },
+    { name: 'Categories', href: '/categories' },
+    ...(product.category
+      ? [{ name: categoryDoc?.name || product.category, href: `/categories/${product.category}` }]
+      : []),
+    ...(product.subcategory
+      ? [{
+          name: subcategoryDoc?.name || product.subcategoryName || product.subcategory,
+          href: `/categories/${product.category}/${product.subcategory}`,
+        }]
+      : []),
+    { name: product.name, href: getProductPath(product) },
+  ];
 
   return (
     <div className="min-h-screen bg-white lg:flex lg:h-screen lg:overflow-hidden">
+      <ProductSEO
+        product={product}
+        categoryName={categoryDoc?.name}
+        subcategoryName={subcategoryDoc?.name || product.subcategoryName}
+      />
+      <div className="absolute top-0 left-0 right-0 z-30 px-4 pt-3 lg:px-6 lg:pt-4 pointer-events-none">
+        <div className="pointer-events-auto bg-white/90 lg:bg-transparent backdrop-blur-sm lg:backdrop-blur-none rounded-lg lg:rounded-none px-3 py-2 lg:px-0 lg:py-0 shadow-sm lg:shadow-none">
+          <Breadcrumbs items={breadcrumbItems} />
+        </div>
+      </div>
       {/* LEFT: Image & Hero Section (Dark Theme) */}
       <div className="relative bg-[#0f0f0f] text-white lg:w-1/2 lg:h-full lg:flex lg:flex-col lg:justify-center">
         {/* Navbar Controls / Overlay */}
@@ -416,7 +465,7 @@ const ProductDetailPage: React.FC = () => {
             </button>
             <div className="w-10 h-10 flex items-center justify-center rounded-full bg-black/20 backdrop-blur-md hover:bg-black/40 transition-all border border-white/10">
               <ShareButton
-                url={`/product/${product.id}`}
+                url={getProductPath(product)}
                 title={product.name}
                 description={product.description}
                 image={primaryImage}
@@ -810,7 +859,7 @@ const ProductDetailPage: React.FC = () => {
                     return (
                       <Link
                         key={sp.id}
-                        href={`/product/${sp.id}`}
+                        href={getProductPath(sp)}
                         className="min-w-[160px] snap-center"
                       >
                         <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 mb-2">

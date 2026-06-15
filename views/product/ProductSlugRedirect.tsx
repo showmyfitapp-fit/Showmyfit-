@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { getProductPath } from '@/utils/productUrls';
 
 const ProductSlugRedirect: React.FC = () => {
   const params = useParams();
@@ -42,7 +43,7 @@ const ProductSlugRedirect: React.FC = () => {
 
         if (productId) {
           console.log('✅ Found product ID in URL:', productId);
-          router.push(`/product/${productId}`, { replace: true });
+          router.push(getProductPath({ id: productId }), { replace: true });
           return;
         }
 
@@ -120,8 +121,7 @@ const ProductSlugRedirect: React.FC = () => {
 
         if (matchedProduct) {
           console.log('✅ Found product:', matchedProduct.id, matchedProduct.name);
-          // Redirect to actual product page
-          router.push(`/product/${matchedProduct.id}`, { replace: true });
+          router.push(getProductPath(matchedProduct), { replace: true });
         } else {
           console.log('❌ Product not found for slug:', slugStr);
           setError(true);

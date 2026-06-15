@@ -48,7 +48,7 @@ const FastImage: React.FC<FastImageProps> = memo(({
     sizes,
     onLoad,
     onError,
-    className: "object-cover transition-opacity duration-300",
+    className: "object-cover h-full transition-opacity duration-300",
     loading: priority ? undefined : loading
   };
 

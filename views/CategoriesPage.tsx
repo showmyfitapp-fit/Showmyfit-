@@ -14,6 +14,9 @@ import { collection, query, getDocs, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useCart } from '../contexts/CartContext';
 import { useSEO, SEOConfigs } from '../hooks/useSEO';
+import { useCategories } from '../hooks/useCategories';
+import { formatCategoryName } from '../lib/categories/format';
+import { getProductPath } from '@/utils/productUrls';
 
 const circleFashionSrc = '/assets/images/banner/men/circle_fashion.jpg';
 const kidsSrc = '/assets/images/kids.jpg';
@@ -29,6 +32,8 @@ interface Product {
   price: number;
   originalPrice?: number;
   category: string;
+  subcategory?: string;
+  searchKeywords?: string[];
   brand: string;
   image: string;
   images?: string[];
@@ -71,6 +76,7 @@ const CategoriesPage: React.FC = () => {
 
   // SEO Configuration
   useSEO(SEOConfigs.categories);
+  const { topLevel: firestoreCategories } = useCategories();
   const [searchTerm, setSearchTerm] = useState('');
   const { addToCart, getCartItemCount, updateQuantity } = useCart();
   const [availableCategories, setAvailableCategories] = useState<Array<{ name: string; originalName?: string; image: string; count?: number }>>([]);
@@ -78,6 +84,19 @@ const CategoriesPage: React.FC = () => {
   useEffect(() => {
     setIsLoaded(true);
   }, []);
+
+  // Redirect legacy ?category= URLs to SEO-friendly routes
+  useEffect(() => {
+    if (!selectedCategory || availableCategories.length === 0) return;
+    const match = availableCategories.find(
+      (c) =>
+        c.name.toLowerCase() === selectedCategory.toLowerCase() ||
+        c.originalName?.toLowerCase() === selectedCategory.toLowerCase()
+    );
+    if (match?.originalName) {
+      router.replace(`/categories/${match.originalName}`);
+    }
+  }, [selectedCategory, availableCategories, router]);
 
   // Category images mapping
   const categoryImageMap: Record<string, string> = {
@@ -115,24 +134,7 @@ const CategoriesPage: React.FC = () => {
     'Electronics': 'from-blue-600 via-cyan-600 to-teal-600'
   };
 
-  // Category name formatting
-  const formatCategoryName = (category: string): string => {
-    const categoryNames: Record<string, string> = {
-      'women': 'Women',
-      'men': 'Men',
-      'kids': 'Kids',
-      'watches': 'Watches',
-      'accessories': 'Accessories',
-      'jewellery': 'Jewellery',
-      'sportswear': 'Sports',
-      'footwear': 'Footwear',
-      'beauty': 'Beauty',
-      'lingerie': 'Lingerie',
-      'home-lifestyle': 'Home & Lifestyle',
-      'gifting-guide': 'Gifting Guide'
-    };
-    return categoryNames[category.toLowerCase()] || category.charAt(0).toUpperCase() + category.slice(1);
-  };
+  // Category name formatting handled by shared lib (formatCategoryName)
 
   // Fetch products and sellers
   useEffect(() => {
@@ -172,28 +174,34 @@ const CategoriesPage: React.FC = () => {
         setProducts(productsData);
         setSellers(sellersData);
 
-        // Extract unique categories from products with counts
+        // Build categories from Firestore taxonomy + live product counts
         const categoryCounts: Record<string, number> = {};
-        productsData.forEach(product => {
+        productsData.forEach((product) => {
           const cat = product.category?.toLowerCase();
-          if (cat) {
-            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+          if (cat) categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        });
+
+        const categoriesWithData = firestoreCategories.map((category) => ({
+          name: category.name,
+          originalName: category.slug,
+          image: category.image || categoryImageMap[category.slug] || 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=300&fit=crop',
+          count: categoryCounts[category.slug] || 0,
+        }));
+
+        // Include legacy product categories not yet in Firestore
+        Object.keys(categoryCounts).forEach((slug) => {
+          if (!categoriesWithData.find((c) => c.originalName === slug)) {
+            categoriesWithData.push({
+              name: formatCategoryName(slug, firestoreCategories),
+              originalName: slug,
+              image: categoryImageMap[slug] || 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=300&fit=crop',
+              count: categoryCounts[slug],
+            });
           }
         });
 
-        const uniqueCategories = Object.keys(categoryCounts);
-
-        // Map categories with images, formatted names, and product counts
-        const categoriesWithData = uniqueCategories.map(category => ({
-          name: formatCategoryName(category),
-          originalName: category,
-          image: categoryImageMap[category] || 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=300&fit=crop',
-          count: categoryCounts[category]
-        }));
-
-        // Sort categories: Men, Women, Kids first, then alphabetically
         categoriesWithData.sort((a, b) => {
-          const priority: Record<string, number> = { 'Men': 1, 'Women': 2, 'Kids': 3 };
+          const priority: Record<string, number> = { Men: 1, Women: 2, Kids: 3 };
           const aPriority = priority[a.name] || 99;
           const bPriority = priority[b.name] || 99;
           if (aPriority !== bPriority) return aPriority - bPriority;
@@ -209,7 +217,7 @@ const CategoriesPage: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [firestoreCategories]);
 
   // Filter products by category and search term
   const filteredProducts = selectedCategory
@@ -222,7 +230,9 @@ const CategoriesPage: React.FC = () => {
       const matchesSearch = searchTerm === '' ||
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-        (product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
+        (product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+        (product.subcategory?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+        (product.searchKeywords?.some((k) => k.includes(searchTerm.toLowerCase())) ?? false);
       return matchesCategory && matchesSearch;
     })
     : products.filter(product => {
@@ -249,8 +259,8 @@ const CategoriesPage: React.FC = () => {
     });
   };
 
-  const handleProductClick = (productId: string) => {
-    router.push(`/product/${productId}`);
+  const handleProductClick = (product: { id: string; slug?: string }) => {
+    router.push(getProductPath(product));
   };
 
   if (selectedCategory) {
@@ -302,7 +312,7 @@ const CategoriesPage: React.FC = () => {
                   <div
                     key={product.id}
                     className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-gray-200 cursor-pointer"
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   >
                     <div className="relative h-40">
                       <OptimizedImage
@@ -470,7 +480,7 @@ const CategoriesPage: React.FC = () => {
                 return (
                   <Link
                     key={category.name}
-                    href={`/browse?category=${encodeURIComponent(category.name)}`}
+                    href={`/categories/${category.originalName || category.name.toLowerCase()}`}
                     className="group relative bg-white rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >

@@ -20,6 +20,13 @@ export function getDistance(lat1: number, lon1: number, lat2: number, lon2: numb
   return R * c;
 }
 
+/** Rough city delivery ETA from distance (km). */
+export function estimateDeliveryMinutes(distanceKm: number): number {
+  if (!distanceKm || distanceKm <= 0) return 30;
+  const travelMinutes = Math.round((distanceKm / 18) * 60);
+  return Math.max(20, travelMinutes + 15);
+}
+
 /**
  * Get user's current location
  * @returns Promise with coordinates or null if denied

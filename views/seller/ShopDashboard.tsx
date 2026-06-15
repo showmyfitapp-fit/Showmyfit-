@@ -13,6 +13,7 @@ import ImageUpload from '@/components/common/ImageUpload';
 import StatsCard from '@/components/common/StatsCard';
 import EmptyState from '@/components/common/EmptyState';
 import { useToast } from '@/hooks/useToast';
+import { getProductPath } from '@/utils/productUrls';
 import Toast from '@/components/ui/Toast';
 
 const ShopDashboard: React.FC = () => {
@@ -36,8 +37,8 @@ const ShopDashboard: React.FC = () => {
     router.push('/');
   };
 
-  const handleProductClick = (productId: string) => {
-    router.push(`/product/${productId}`);
+  const handleProductClick = (product: { id: string; slug?: string }) => {
+    router.push(getProductPath(product));
   };
 
   const handleAddProduct = (e: React.FormEvent) => {
@@ -241,7 +242,7 @@ const ShopDashboard: React.FC = () => {
               <ProductCard
                 key={product.id}
                 product={{ ...product, image: product.imageUrl }}
-                onClick={() => handleProductClick(product.id)}
+                onClick={() => handleProductClick(product)}
               />
             ))}
           </div>

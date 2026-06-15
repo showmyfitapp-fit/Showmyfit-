@@ -4,9 +4,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import FastImage from '../common/FastImage';
 import ShareButton from '../common/ShareButton';
+import { getProductPath } from '@/utils/productUrls';
 
 interface Product {
   id: string;
+  slug?: string;
   sellerId?: string;
   name: string;
   price: number;
@@ -80,7 +82,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         {/* Share Button */}
         <div className="absolute top-3 right-12 z-10" onClick={handleShareClick}>
           <ShareButton
-            url={`/product/${product.id}`}
+            url={getProductPath(product)}
             title={product.name}
             description={product.description || product.brand}
             image={product.image}
@@ -166,7 +168,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
     // Default behavior: Navigate to product page
     if (product.id) {
-      router.push(`/product/${product.id}`);
+      router.push(getProductPath(product));
     } else {
       console.error('ProductCard: Product has no ID:', product);
     }

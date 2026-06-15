@@ -11,6 +11,7 @@ import {
   Heart
 } from 'lucide-react';
 
+import { getProductPath } from '@/utils/productUrls';
 import ProductCard from '../components/product/ProductCard';
 import StoryCard from '../components/common/StoryCard';
 import OptimizedImage from '../components/common/OptimizedImage';
@@ -251,20 +252,17 @@ const HomePage: React.FC = () => {
 
 
 
-  const handleProductClick = (productId: string) => {
-    console.log('HomePage: handleProductClick called with ID:', productId);
-    if (!productId) {
-      console.error('HomePage: Missing productId');
+  const handleProductClick = (product: { id: string; slug?: string }) => {
+    if (!product.id) {
+      console.error('HomePage: Missing product id');
       return;
     }
 
-    // Add to recently viewed
-    const updatedRecentlyViewed = [productId, ...recentlyViewed.filter(id => id !== productId)].slice(0, 10);
+    const updatedRecentlyViewed = [product.id, ...recentlyViewed.filter(id => id !== product.id)].slice(0, 10);
     setRecentlyViewed(updatedRecentlyViewed);
     localStorage.setItem('recentlyViewedProducts', JSON.stringify(updatedRecentlyViewed));
 
-    console.log('HomePage: Navigating to /product/' + productId);
-    router.push(`/product/${productId}`);
+    router.push(getProductPath(product));
   };
 
   // Get products for a specific section
@@ -819,7 +817,7 @@ const HomePage: React.FC = () => {
                     <div
                       key={product.id}
                       className="flex-shrink-0 w-40 md:w-56 cursor-pointer group"
-                      onClick={() => handleProductClick(product.id)}
+                      onClick={() => handleProductClick(product)}
                     >
                       <div className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 overflow-hidden relative">
                         <div className="aspect-[4/5] relative bg-gray-100 overflow-hidden">
@@ -883,7 +881,7 @@ const HomePage: React.FC = () => {
                       <div
                         key={product.id}
                         className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                        onClick={() => handleProductClick(product.id)}
+                        onClick={() => handleProductClick(product)}
                       >
                         <div className="aspect-square relative overflow-hidden bg-gray-100 rounded-t-lg">
                           <FastImage
@@ -930,7 +928,7 @@ const HomePage: React.FC = () => {
                       <div
                         key={product.id}
                         className="flex-shrink-0 w-40 md:w-56 bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                        onClick={() => handleProductClick(product.id)}
+                        onClick={() => handleProductClick(product)}
                       >
                         <div className="aspect-[4/5] relative overflow-hidden bg-gray-100 rounded-t-lg">
                           <FastImage
@@ -981,7 +979,7 @@ const HomePage: React.FC = () => {
                       <div
                         key={product.id}
                         className="bg-white rounded-xl shadow-sm border border-orange-100 hover:border-orange-300 transition-all cursor-pointer group hover:-translate-y-1"
-                        onClick={() => handleProductClick(product.id)}
+                        onClick={() => handleProductClick(product)}
                       >
                         <div className="aspect-square relative overflow-hidden bg-white rounded-t-xl p-4">
                           <FastImage
@@ -1073,7 +1071,7 @@ const HomePage: React.FC = () => {
                               <div
                                 key={product.id}
                                 className="flex-shrink-0 w-36 md:w-44 relative group cursor-pointer"
-                                onClick={() => handleProductClick(product.id)}
+                                onClick={() => handleProductClick(product)}
                               >
                                 <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-purple-300 hover:-translate-y-1">
                                   {/* Product Image */}
@@ -1158,7 +1156,7 @@ const HomePage: React.FC = () => {
                   const discount = Math.round(((originalPrice - product.price) / originalPrice) * 100);
 
                   return (
-                    <div key={product.id || index} className="flex-shrink-0 bg-white border border-gray-200 rounded-lg p-3 w-40 md:w-48 hover:shadow-lg transition-shadow touch-manipulation cursor-pointer" onClick={() => handleProductClick(product.id)}>
+                    <div key={product.id || index} className="flex-shrink-0 bg-white border border-gray-200 rounded-lg p-3 w-40 md:w-48 hover:shadow-lg transition-shadow touch-manipulation cursor-pointer" onClick={() => handleProductClick(product)}>
                       <div className="relative mb-3 h-24 md:h-32">
                         <FastImage
                           src={product.image || product.imageUrl || `https://images.unsplash.com/photo-${1500000000000 + index * 1000000}?w=200&h=200&fit=crop`}
@@ -1221,7 +1219,7 @@ const HomePage: React.FC = () => {
                     <div
                       key={product.id || index}
                       className="flex-shrink-0 bg-gray-50 rounded-lg p-3 w-32 md:w-40 hover:bg-gray-100 transition-colors touch-manipulation cursor-pointer"
-                      onClick={() => handleProductClick(product.id)}
+                      onClick={() => handleProductClick(product)}
                     >
                       <div className="w-full h-20 md:h-24 mb-2">
                         <FastImage
@@ -1279,7 +1277,7 @@ const HomePage: React.FC = () => {
                   <div
                     key={product.id}
                     className="flex-shrink-0 w-44 md:w-60 bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all cursor-pointer group"
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   >
                     <div className="aspect-video relative overflow-hidden bg-white rounded-t-xl p-2">
                       <FastImage
@@ -1328,7 +1326,7 @@ const HomePage: React.FC = () => {
                   <div
                     key={product.id}
                     className="bg-white rounded-lg shadow-sm border border-gray-100 hover:border-yellow-200 transition-all cursor-pointer group"
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   >
                     <div className="aspect-square relative overflow-hidden bg-gray-50 rounded-t-lg">
                       <FastImage
@@ -1375,7 +1373,7 @@ const HomePage: React.FC = () => {
                   <div
                     key={product.id}
                     className="flex-shrink-0 w-40 md:w-48 bg-gray-800 rounded-xl border border-gray-700 hover:border-gray-500 transition-all cursor-pointer group overflow-hidden"
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   >
                     <div className="aspect-square relative overflow-hidden bg-gray-700">
                       <FastImage
@@ -1421,7 +1419,7 @@ const HomePage: React.FC = () => {
                   <div
                     key={product.id}
                     className="bg-white rounded-2xl shadow-sm border border-yellow-100 hover:shadow-md transition-all cursor-pointer group hover:-translate-y-1"
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   >
                     <div className="aspect-[4/5] relative overflow-hidden bg-yellow-50 rounded-t-2xl p-2">
                       <FastImage

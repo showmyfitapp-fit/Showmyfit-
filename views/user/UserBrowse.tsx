@@ -10,7 +10,7 @@ import SearchBar from '@/components/product/SearchBar';
 import CategoryFilter from '@/components/product/CategoryFilter';
 import EmptyState from '@/components/common/EmptyState';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { getDistance, getUserLocation } from '@/utils/distance';
+import { getProductPath } from '@/utils/productUrls';
 
 const UserBrowse: React.FC = () => {
   const router = useRouter();
@@ -83,8 +83,8 @@ const UserBrowse: React.FC = () => {
     return { shop, distance };
   };
 
-  const handleProductClick = (productId: string) => {
-    router.push(`/product/${productId}`);
+  const handleProductClick = (product: { id: string; slug?: string }) => {
+    router.push(getProductPath(product));
   };
 
   return (
@@ -284,7 +284,7 @@ const UserBrowse: React.FC = () => {
                     product={{ ...product, image: product.imageUrl }}
                     shop={shop}
                     distance={distance}
-                    onClick={() => handleProductClick(product.id)}
+                    onClick={() => handleProductClick(product)}
                   />
                 </div>
               );

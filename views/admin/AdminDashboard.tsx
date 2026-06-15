@@ -158,6 +158,22 @@ const AdminDashboard: React.FC = () => {
       stats: stats.totalProducts
     },
     {
+      title: 'Category Management',
+      description: 'Categories, analytics, and product migration',
+      icon: Store,
+      link: '/admin/categories',
+      color: 'bg-indigo-500',
+      stats: null
+    },
+    {
+      title: 'Category Migration',
+      description: 'Backfill subcategories and SEO fields on products',
+      icon: Zap,
+      link: '/admin/category-migration',
+      color: 'bg-indigo-600',
+      stats: null
+    },
+    {
       title: 'Home Page Management',
       description: 'Manage featured products, deals, and offers',
       icon: BarChart3,

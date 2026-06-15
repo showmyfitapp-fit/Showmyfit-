@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Share2, Copy, Check, Facebook, Twitter, MessageCircle, Link2, X } from 'lucide-react';
+import { absoluteUrl } from '@/config/site';
+import { getProductPath } from '@/utils/productUrls';
 
 interface ShareButtonProps {
   url: string;
@@ -25,31 +27,40 @@ const ShareButton: React.FC<ShareButtonProps> = ({
   const [showModal, setShowModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Format URL as showmyfit.com/productname
-  const formatShareUrl = (url: string, productTitle: string): string => {
-    // Convert product title to URL-friendly format
+  const formatShareUrl = (shareUrl: string, productTitle: string): string => {
+    if (shareUrl.startsWith('http://') || shareUrl.startsWith('https://')) {
+      return shareUrl;
+    }
+
+    const cleanPath = shareUrl.split('?')[0];
+
+    if (cleanPath.startsWith('/p/')) {
+      return absoluteUrl(cleanPath);
+    }
+
+    if (cleanPath.startsWith('/product/')) {
+      const legacyId = cleanPath.replace('/product/', '');
+      return absoluteUrl(getProductPath({ id: legacyId }));
+    }
+
     const productName = productTitle
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
-      .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
-    
-    // Extract product ID from URL if available
-    let extractedProductId = productId || '';
-    if (!extractedProductId && url.includes('/product/')) {
-      extractedProductId = url.split('/product/')[1]?.split('?')[0] || '';
-    } else if (!extractedProductId && url.startsWith('/product/')) {
-      extractedProductId = url.replace('/product/', '').split('?')[0];
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    let extractedId = productId || '';
+    if (!extractedId && cleanPath.includes('/p/')) {
+      extractedId = cleanPath.split('/p/')[1] || '';
+    } else if (!extractedId && cleanPath.includes('/product/')) {
+      extractedId = cleanPath.split('/product/')[1] || '';
     }
-    
-    // Use product name if available, otherwise use ID
-    const slug = productName || extractedProductId || 'product';
-    
-    // Include product ID as query parameter for reliable matching
-    if (extractedProductId) {
-      return `https://showmyfit.com/${slug}?id=${extractedProductId}`;
+
+    if (extractedId) {
+      return absoluteUrl(getProductPath({ id: extractedId }));
     }
-    
-    return `https://showmyfit.com/${slug}`;
+
+    const slug = productName || 'product';
+    return absoluteUrl(`/${slug}`);
   };
 
   const fullUrl = formatShareUrl(url, title);

@@ -10,6 +10,8 @@ import ShowMyFITLogo from '../common/ShowMyFITLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useWishlist } from '@/contexts/WishlistContext';
+import { getProductPath } from '@/utils/productUrls';
+import { logSearchQuery } from '@/lib/analytics/searchAnalytics';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 
@@ -104,6 +106,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      logSearchQuery(searchQuery.trim());
       router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery(''); // Clear search after navigation
       setShowSuggestions(false);
@@ -120,8 +123,8 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
     }
   };
 
-  const handleSuggestionClick = (productId: string) => {
-    router.push(`/product/${productId}`);
+  const handleSuggestionClick = (product: { id: string; slug?: string }) => {
+    router.push(getProductPath(product));
     setSearchQuery('');
     setShowSuggestions(false);
   };
@@ -227,7 +230,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
                       {suggestions.map((product) => (
                         <button
                           key={product.id}
-                          onClick={() => handleSuggestionClick(product.id)}
+                          onClick={() => handleSuggestionClick(product)}
                           className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors text-left group"
                         >
                           <div className="relative w-12 h-12 flex-shrink-0">

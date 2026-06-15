@@ -10,13 +10,18 @@ import {
 import { collection, query, getDocs, where, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useWishlist } from '../contexts/WishlistContext';
+import { getProductPath } from '@/utils/productUrls';
 import FastImage from '../components/common/FastImage';
 import ShareButton from '../components/common/ShareButton';
+import { useCategories } from '../hooks/useCategories';
+import { formatCategoryName } from '../lib/categories/format';
+import { logSearchQuery } from '@/lib/analytics/searchAnalytics';
 
 const SearchPage: React.FC = () => {
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { topLevel: firestoreCategories } = useCategories();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -31,24 +36,16 @@ const SearchPage: React.FC = () => {
   const [availableCategories, setAvailableCategories] = useState<string[]>(['All']);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
 
-  // Category name formatting
-  const formatCategoryName = (category: string): string => {
-    const categoryNames: Record<string, string> = {
-      'women': 'Women', 'men': 'Men', 'kids': 'Kids', 'watches': 'Watches',
-      'accessories': 'Accessories', 'jewellery': 'Jewellery', 'sportswear': 'Sports',
-      'footwear': 'Footwear', 'beauty': 'Beauty', 'lingerie': 'Lingerie',
-      'home-lifestyle': 'Home', 'home': 'Home', 'electronics': 'Electronics',
-      'gifting-guide': 'Gifting Guide'
-    };
-    return categoryNames[category.toLowerCase()] || category.charAt(0).toUpperCase() + category.slice(1);
-  };
-
   // Get search query and category from URL parameters
   useEffect(() => {
     const queryParam = searchParams.get('q');
     const categoryParam = searchParams.get('category');
 
-    if (queryParam) setSearchQuery(decodeURIComponent(queryParam));
+    if (queryParam) {
+      const decoded = decodeURIComponent(queryParam);
+      setSearchQuery(decoded);
+      logSearchQuery(decoded, categoryParam ? decodeURIComponent(categoryParam) : undefined);
+    }
     if (categoryParam) setSelectedCategory(decodeURIComponent(categoryParam));
   }, [searchParams]);
 
@@ -111,8 +108,14 @@ const SearchPage: React.FC = () => {
         const snapshot = await getDocs(productsQuery);
         const productsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        const categories = Array.from(new Set(productsList.map((p: any) => p.category?.toLowerCase()).filter(Boolean)));
-        setAvailableCategories(['All', ...categories.map(c => formatCategoryName(c))]);
+        const productCategorySlugs = Array.from(
+          new Set(productsList.map((p: any) => p.category?.toLowerCase()).filter(Boolean))
+        );
+        const firestoreNames = firestoreCategories.map((c) => c.name);
+        const legacyNames = productCategorySlugs
+          .filter((slug) => !firestoreCategories.find((c) => c.slug === slug))
+          .map((slug) => formatCategoryName(slug, firestoreCategories));
+        setAvailableCategories(['All', ...firestoreNames, ...legacyNames]);
         setProducts(productsList);
       } catch (error) {
         console.error('Error loading products:', error);
@@ -121,11 +124,25 @@ const SearchPage: React.FC = () => {
       }
     };
     fetchProducts();
-  }, []);
+  }, [firestoreCategories]);
+
+  const matchesProductSearch = (product: any, queryText: string) => {
+    if (!queryText) return true;
+    const q = queryText.toLowerCase();
+    return (
+      product.name?.toLowerCase().includes(q) ||
+      product.brand?.toLowerCase().includes(q) ||
+      product.description?.toLowerCase().includes(q) ||
+      product.category?.toLowerCase().includes(q) ||
+      product.subcategory?.toLowerCase().includes(q) ||
+      product.subcategoryName?.toLowerCase().includes(q) ||
+      product.searchKeywords?.some((keyword: string) => keyword.includes(q))
+    );
+  };
 
   // Filtering Logic
   const filteredProducts = products.filter(product => {
-    const matchesSearch = searchQuery === '' || product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.brand?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesProductSearch(product, searchQuery);
     let matchesCategory = true;
     if (selectedCategory !== 'All') {
       const pCat = formatCategoryName(product.category || '').toLowerCase();
@@ -273,7 +290,7 @@ const SearchPage: React.FC = () => {
                 {filteredProducts.map((product) => (
                   <Link
                     key={product.id}
-                    href={`/product/${product.id}`}
+                    href={getProductPath(product)}
                     className="group bg-white rounded-[32px] overflow-hidden border border-neutral-100 transition-all hover:shadow-[0_20px_50px_-15px_rgba(0,0,0,0.08)] hover:scale-[1.02]"
                   >
                     <div className="aspect-[3/4] relative overflow-hidden bg-neutral-50">

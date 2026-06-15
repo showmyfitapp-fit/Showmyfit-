@@ -104,7 +104,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
 
   // Hide the top navbar on specific routes (e.g., product detail and seller store pages)
-  const isProductDetailPage = pathname?.startsWith('/product/');
+  const isProductDetailPage = pathname?.startsWith('/p/') || pathname?.startsWith('/product/');
   const isSellerStorePage = pathname?.startsWith('/seller/');
   const hideTopNavbar = isSellerStorePage;
 

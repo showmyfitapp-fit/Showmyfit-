@@ -11,10 +11,16 @@ import {
 import { useCart } from '../contexts/CartContext';
 import CartNotification from '../components/common/CartNotification';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import API_ENDPOINTS from '../config/api';
 import OptimizedImage from '../components/common/OptimizedImage';
+import { getProductPath } from '@/utils/productUrls';
+import { getUserLocation } from '@/utils/distance';
+import {
+  computeDistanceAndEta,
+  createOrdersFromCart,
+  fetchSellerShopInfo,
+  groupCartBySeller,
+} from '@/lib/orders';
 
 const CartPage: React.FC = () => {
   const {
@@ -30,16 +36,23 @@ const CartPage: React.FC = () => {
     setShowAddNotification
   } = useCart();
 
-  const { currentUser } = useAuth();
+  const { currentUser, userData } = useAuth();
   const router = useRouter();
   const [showLastAdded, setShowLastAdded] = useState(false);
   const [shopDetails, setShopDetails] = useState<{ [key: string]: any }>({});
   const [loadingShops, setLoadingShops] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     setIsLoaded(true);
+    if (userData?.phone) setCustomerPhone(userData.phone);
+  }, [userData?.phone]);
+
+  useEffect(() => {
+    getUserLocation().then(setCustomerLocation);
   }, []);
 
   // Fetch shop details for cart items
@@ -54,17 +67,19 @@ const CartPage: React.FC = () => {
       try {
         for (const shopId of shopIds) {
           if (shopId) {
-            const shopDoc = await getDoc(doc(db, 'users', shopId));
-            if (shopDoc.exists()) {
-              const shopData = shopDoc.data();
-              shopDetailsMap[shopId] = {
-                name: shopData.businessName || shopData.displayName || 'Unknown Shop',
-                address: shopData.address || 'Address not available',
-                phone: shopData.phone || 'Phone not available',
-                rating: shopData.stats?.rating || 0,
-                totalOrders: shopData.stats?.totalOrders || 0
-              };
-            }
+            const seller = await fetchSellerShopInfo(shopId);
+            const { distanceKm, etaMinutes } = computeDistanceAndEta(
+              customerLocation,
+              seller.storeLocation
+            );
+            shopDetailsMap[shopId] = {
+              name: seller.sellerName,
+              address: seller.storeAddress || 'Address not available',
+              phone: seller.storePhone || 'Phone not available',
+              location: seller.storeLocation,
+              distanceKm,
+              etaMinutes,
+            };
           }
         }
         setShopDetails(shopDetailsMap);
@@ -76,7 +91,7 @@ const CartPage: React.FC = () => {
     };
 
     fetchShopDetails();
-  }, [cartItems]);
+  }, [cartItems, customerLocation]);
 
   const subtotal = cartItems.reduce((sum, item) => sum + (item.originalPrice || item.price) * item.quantity, 0);
   const discount = cartItems.reduce((sum, item) => sum + ((item.originalPrice || item.price) - item.price) * item.quantity, 0);
@@ -86,6 +101,18 @@ const CartPage: React.FC = () => {
   // Handle checkout with Razorpay
   const handleCheckout = async () => {
     if (cartItems.length === 0) return;
+
+    if (!currentUser) {
+      alert('Please sign in to place an order.');
+      router.push('/auth');
+      return;
+    }
+
+    const phone = customerPhone.trim() || userData?.phone || '';
+    if (!phone || phone.length < 10) {
+      alert('Please enter a valid phone number for delivery updates and OTP.');
+      return;
+    }
 
     setIsProcessingPayment(true);
 
@@ -167,28 +194,21 @@ const CartPage: React.FC = () => {
             const verifyData = await verifyResponse.json();
 
             if (verifyData.verified) {
-              // Save order to Firestore
-              const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
-
-              await addDoc(collection(db, 'orders'), {
-                items: cartItems,
-                subtotal,
-                discount,
-                shipping,
-                total,
+              const created = await createOrdersFromCart({
+                cartItems,
+                userId: currentUser!.uid,
+                customerName: currentUser?.displayName || userData?.displayName || 'Customer',
+                customerEmail: currentUser?.email || userData?.email || '',
+                customerPhone: phone,
+                customerAddress: userData?.address,
                 paymentId: response.razorpay_payment_id,
-                orderId: response.razorpay_order_id,
-                paymentStatus: 'paid',
-                orderStatus: 'pending',
-                createdAt: serverTimestamp(),
-                userId: currentUser?.uid || 'guest'
+                razorpayOrderId: response.razorpay_order_id,
               });
 
-              // Clear cart
               clearCart();
-
-              alert('🎉 Payment successful! Your order has been placed.');
+              alert(`Payment successful! ${created.length} order(s) placed. Track them in My Orders.`);
               setIsProcessingPayment(false);
+              router.push('/orders');
             } else {
               throw new Error('Payment verification failed');
             }
@@ -367,7 +387,7 @@ const CartPage: React.FC = () => {
                   <div className="flex gap-5 md:gap-6">
                     {/* Image */}
                     <Link
-                      href={`/product/${item.id}`}
+                      href={getProductPath({ id: item.id })}
                       className="block w-24 h-32 md:w-32 md:h-40 bg-gray-50 rounded-xl overflow-hidden shrink-0 border border-gray-100 relative group"
                     >
                       <OptimizedImage
@@ -392,8 +412,17 @@ const CartPage: React.FC = () => {
                           >
                             {shopDetails[item.sellerId || '']?.name || 'Store'}
                           </Link>
+                          {shopDetails[item.sellerId || '']?.distanceKm != null && (
+                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {shopDetails[item.sellerId || ''].distanceKm} km away
+                              {shopDetails[item.sellerId || '']?.etaMinutes != null && (
+                                <span> · ~{shopDetails[item.sellerId || ''].etaMinutes} min delivery</span>
+                              )}
+                            </p>
+                          )}
                           <Link
-                            href={`/product/${item.id}`}
+                            href={getProductPath({ id: item.id })}
                             className="block font-black text-lg md:text-xl text-gray-900 hover:text-purple-600 transition-colors leading-tight line-clamp-2"
                           >
                             {item.name}
@@ -489,6 +518,38 @@ const CartPage: React.FC = () => {
                 </h2>
 
                 <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+                      Phone for delivery OTP (WhatsApp)
+                    </label>
+                    <input
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="10-digit mobile number"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-purple-200 outline-none"
+                    />
+                  </div>
+
+                  {Object.entries(groupCartBySeller(cartItems)).map(([sellerId, items]) => {
+                    const shop = shopDetails[sellerId];
+                    if (!shop) return null;
+                    return (
+                      <div key={sellerId} className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                        <p className="text-xs font-black uppercase tracking-wide text-purple-700 mb-1">{shop.name}</p>
+                        <p className="text-sm text-gray-700">{items.length} item(s)</p>
+                        {shop.distanceKm != null ? (
+                          <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {shop.distanceKm} km · ~{shop.etaMinutes ?? 30} min ETA
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-500 mt-1">Enable location for distance & ETA</p>
+                        )}
+                      </div>
+                    );
+                  })}
+
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 font-medium">Subtotal</span>
                     <span className="text-gray-900 font-bold">₹{subtotal.toLocaleString()}</span>
@@ -551,7 +612,7 @@ const CartPage: React.FC = () => {
             <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight mb-6">Recently Added</h3>
             <div className="flex gap-4 overflow-x-auto pb-4 snap-x scrollbar-hide">
               {lastAddedProducts.slice(0, 4).map((prod, i) => (
-                <Link key={i} href={`/product/${prod.id}`} className="min-w-[180px] md:min-w-[220px] snap-center group">
+                <Link key={i} href={getProductPath({ id: prod.id, slug: prod.slug })} className="min-w-[180px] md:min-w-[220px] snap-center group">
                   <div className="aspect-[3/4] bg-gray-50 rounded-2xl mb-3 overflow-hidden border border-gray-100 shadow-sm">
                     <OptimizedImage
                       src={prod.image}

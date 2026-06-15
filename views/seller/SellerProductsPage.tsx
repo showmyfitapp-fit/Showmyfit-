@@ -13,6 +13,7 @@ import { useCart } from '@/contexts/CartContext';
 import FastImage from '@/components/common/FastImage';
 import { collection, query, getDocs, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { getProductPath } from '@/utils/productUrls';
 
 interface Product {
   id: string;
@@ -32,6 +33,7 @@ interface Product {
   status: 'active' | 'inactive' | 'draft';
   sellerId: string;
   sellerName?: string;
+  slug?: string;
   createdAt: Date;
   updatedAt: Date;
   categorySpecificData?: {
@@ -388,7 +390,7 @@ const SellerProductsPage: React.FC = () => {
                 <div
                   key={product.id}
                   className="group relative bg-white rounded-2xl p-3 md:p-4 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
-                  onClick={() => router.push(`/product/${product.id}`)}
+                  onClick={() => router.push(getProductPath(product))}
                 >
                   {/* Image Container */}
                   <div className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative">

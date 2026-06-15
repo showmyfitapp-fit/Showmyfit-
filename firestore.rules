@@ -73,6 +73,24 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Search analytics - public write for counts, admin read
+    match /search_analytics/{searchId} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.query is string
+        && request.resource.data.count is int
+        && request.resource.data.count >= 1;
+      allow update: if request.resource.data.query is string
+        && request.resource.data.count is int
+        && request.resource.data.count >= resource.data.count;
+    }
+
+    // In-app notifications (seller order alerts)
+    match /notifications/{notificationId} {
+      allow read, update: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null;
+    }
     
     // Homepage content - public read
     match /homepageContent/{contentId} {

@@ -51,6 +51,11 @@ import { updateUserProfile } from '@/firebase/auth';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import ReservedProducts from '@/components/seller/ReservedProducts';
+import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
+import { useCategories } from '@/hooks/useCategories';
+import { getCategorySpecificFields } from '@/lib/categories/categoryFields';
+import { buildProductSeoFields } from '@/utils/productSeo';
+import { getProductPath } from '@/utils/productUrls';
 
 interface Product {
   id?: string;
@@ -59,6 +64,11 @@ interface Product {
   price: number;
   originalPrice?: number;
   category: string;
+  subcategory?: string;
+  subcategoryName?: string;
+  categoryPath?: string[];
+  slug?: string;
+  searchKeywords?: string[];
   brand: string;
   image: string;
   images?: string[];
@@ -129,12 +139,9 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
   const [showProfilePicUpload, setShowProfilePicUpload] = useState(false);
   const [profileLinkCopied, setProfileLinkCopied] = useState(false);
   const [categorySpecificData, setCategorySpecificData] = useState<Record<string, any>>({});
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [subcategoryDropdownOpen, setSubcategoryDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
-  const subcategoryDropdownRef = useRef<HTMLDivElement>(null);
+  const { topLevel: topLevelCategories } = useCategories();
 
   // Analytics & Charts State
   const [sellerStats, setSellerStats] = useState({
@@ -167,6 +174,8 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     price: 0,
     originalPrice: 0,
     category: '',
+    subcategory: '',
+    subcategoryName: '',
     brand: '',
     image: '',
     images: [],
@@ -180,212 +189,25 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     updatedAt: new Date()
   });
 
-  const categories = [
-    { value: 'women', label: 'Women', icon: '👗' },
-    { value: 'men', label: 'Men', icon: '👨' },
-    { value: 'footwear', label: 'Footwear', icon: '👟' },
-    { value: 'jewellery', label: 'Jewellery', icon: '💍' },
-    { value: 'lingerie', label: 'Lingerie', icon: '👙' },
-    { value: 'watches', label: 'Watches', icon: '⌚' },
-    { value: 'gifting-guide', label: 'Gifting Guide', icon: '🎁' },
-    { value: 'kids', label: 'Kids', icon: '👶' },
-    { value: 'home-lifestyle', label: 'Home & Lifestyle', icon: '🏠' },
-    { value: 'accessories', label: 'Accessories', icon: '👜' },
-    { value: 'beauty', label: 'Beauty by Tira', icon: '💄' },
-    { value: 'sportswear', label: 'Sportswear', icon: '⚽' }
-  ];
-
   const statusOptions = [
     { value: 'active', label: 'Active', icon: '✅', color: 'text-green-600' },
     { value: 'inactive', label: 'Inactive', icon: '❌', color: 'text-red-600' },
     { value: 'draft', label: 'Draft', icon: '📝', color: 'text-yellow-600' }
   ];
 
-  // Dynamic form fields based on category
-  const getCategorySpecificFields = (category: string, categoryData?: Record<string, any>) => {
-    switch (category) {
-      case 'women':
-        return {
-          subcategory: { type: 'select', options: ['Tops & T-shirts', 'Dresses & Kurtas', 'Jeans & Pants', 'Sarees & Ethnic Wear', 'Jackets & Sweaters', 'Innerwear & Lingerie', 'Jewellery & Accessories'], label: 'Subcategory' },
-          sizes: { type: 'multi-select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Other'], label: 'Available Sizes' },
-          sizeOther: { type: 'text', label: 'Custom Sizes', placeholder: 'Enter custom sizes separated by commas (e.g., Free Size, One Size, etc.)' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          material: { type: 'text', label: 'Material' },
-          occasion: { type: 'select', options: ['Casual', 'Formal', 'Party', 'Wedding', 'Office'], label: 'Occasion' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' },
-          careInstructions: { type: 'text', label: 'Care Instructions', placeholder: 'e.g., Machine wash cold, hang dry' },
-          fit: { type: 'select', options: ['Slim Fit', 'Regular Fit', 'Loose Fit', 'Oversized'], label: 'Fit Type' }
-        };
-      case 'men':
-        return {
-          subcategory: { type: 'select', options: ['Shirts & T-shirts', 'Jeans & Trousers', 'Shorts & Trackpants', 'Jackets & Hoodies', 'Innerwear', 'Watches & Accessories'], label: 'Subcategory' },
-          sizes: { type: 'multi-select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Other'], label: 'Available Sizes' },
-          sizeOther: { type: 'text', label: 'Custom Sizes', placeholder: 'Enter custom sizes separated by commas (e.g., Free Size, One Size, etc.)' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          material: { type: 'text', label: 'Material' },
-          occasion: { type: 'select', options: ['Casual', 'Formal', 'Business', 'Party', 'Sports'], label: 'Occasion' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' },
-          careInstructions: { type: 'text', label: 'Care Instructions', placeholder: 'e.g., Machine wash cold, hang dry' },
-          fit: { type: 'select', options: ['Slim Fit', 'Regular Fit', 'Loose Fit', 'Oversized'], label: 'Fit Type' }
-        };
-      case 'footwear':
-        // Check subcategory to determine appropriate sizes
-        const footwearSubcategory = (categoryData || categorySpecificData)?.subcategory;
-        const isFootwearKids = footwearSubcategory === 'Kids Footwear';
-        const isFootwearMen = footwearSubcategory === 'Men\'s Footwear';
-        const isFootwearWomen = footwearSubcategory === 'Women\'s Footwear';
-
-        let footwearSizes: string[];
-        if (isFootwearKids) {
-          footwearSizes = ['S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13', 'Other'];
-        } else if (isFootwearMen) {
-          footwearSizes = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', 'Other'];
-        } else if (isFootwearWomen) {
-          footwearSizes = ['4', '5', '6', '7', '8', '9', '10', '11', '12', 'Other'];
-        } else {
-          // Default sizes for other footwear subcategories
-          footwearSizes = ['5', '6', '7', '8', '9', '10', '11', '12', 'Other'];
-        }
-
-        return {
-          subcategory: { type: 'select', options: ['Men\'s Footwear', 'Women\'s Footwear', 'Kids Footwear', 'Sandals & Slippers', 'Sneakers & Sports Shoes', 'Formal Shoes', 'Casual Shoes'], label: 'Subcategory' },
-          sizes: { type: 'multi-select', options: footwearSizes, label: 'Available Sizes' },
-          sizeOther: { type: 'text', label: 'Custom Sizes', placeholder: 'Enter custom sizes separated by commas (e.g., Free Size, One Size, etc.)' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          material: { type: 'text', label: 'Upper Material' },
-          soleMaterial: { type: 'text', label: 'Sole Material' },
-          heelHeight: { type: 'select', options: ['Flat', 'Low (1-2 inches)', 'Medium (2-3 inches)', 'High (3+ inches)'], label: 'Heel Height' },
-          closure: { type: 'select', options: ['Lace-up', 'Slip-on', 'Buckle', 'Velcro'], label: 'Closure' },
-          width: { type: 'select', options: ['Narrow', 'Medium', 'Wide', 'Extra Wide'], label: 'Width' }
-        };
-      case 'jewellery':
-        return {
-          subcategory: { type: 'select', options: ['Gold-plated Jewellery', 'Silver Jewellery', 'Artificial Jewellery', 'Earrings', 'Necklaces', 'Bangles', 'Rings'], label: 'Subcategory' },
-          material: { type: 'select', options: ['Gold', 'Silver', 'Platinum', 'Diamond', 'Pearl', 'Gemstone'], label: 'Primary Material' },
-          secondaryMaterial: { type: 'text', label: 'Secondary Material', placeholder: 'e.g., Gold plated, Sterling silver' },
-          type: { type: 'select', options: ['Ring', 'Necklace', 'Earrings', 'Bracelet', 'Anklet'], label: 'Type' },
-          occasion: { type: 'select', options: ['Daily Wear', 'Formal', 'Party', 'Wedding'], label: 'Occasion' },
-          gender: { type: 'select', options: ['Women', 'Men', 'Unisex'], label: 'Gender' },
-          gemstone: { type: 'text', label: 'Gemstone Details', placeholder: 'e.g., Diamond, Ruby, Emerald' },
-          weight: { type: 'text', label: 'Weight (grams)', placeholder: 'e.g., 2.5g' }
-        };
-      case 'lingerie':
-        return {
-          subcategory: { type: 'select', options: ['Bra', 'Panties', 'Lingerie Set', 'Nightwear', 'Shapewear', 'Sleepwear'], label: 'Subcategory' },
-          sizes: { type: 'multi-select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], label: 'Available Sizes' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          material: { type: 'text', label: 'Material' },
-          type: { type: 'select', options: ['Bra', 'Panties', 'Lingerie Set', 'Sleepwear'], label: 'Type' },
-          cupSize: { type: 'select', options: ['A', 'B', 'C', 'D', 'DD', 'E', 'F'], label: 'Cup Size' },
-          bandSize: { type: 'select', options: ['28', '30', '32', '34', '36', '38', '40', '42'], label: 'Band Size' }
-        };
-      case 'watches':
-        return {
-          subcategory: { type: 'select', options: ['Analog', 'Digital', 'Smartwatch', 'Chronograph', 'Luxury', 'Casual'], label: 'Subcategory' },
-          brand: { type: 'text', label: 'Brand' },
-          type: { type: 'select', options: ['Analog', 'Digital', 'Smartwatch', 'Chronograph'], label: 'Type' },
-          material: { type: 'select', options: ['Stainless Steel', 'Leather', 'Rubber', 'Gold', 'Silver'], label: 'Band Material' },
-          caseMaterial: { type: 'text', label: 'Case Material', placeholder: 'e.g., Stainless steel, ceramic' },
-          waterResistance: { type: 'select', options: ['30m', '50m', '100m', '200m', 'Not Water Resistant'], label: 'Water Resistance' },
-          movement: { type: 'select', options: ['Quartz', 'Automatic', 'Mechanical', 'Solar'], label: 'Movement Type' },
-          features: { type: 'multi-text', label: 'Features', placeholder: 'e.g., Date display, chronograph, GPS' }
-        };
-      case 'kids':
-        // Check if subcategory is Footwear to show kids shoe sizes
-        const isKidsFootwear = (categoryData || categorySpecificData)?.subcategory === 'Footwear';
-        return {
-          subcategory: { type: 'select', options: ['Baby Clothes', 'Toys', 'School Supplies', 'Footwear', 'Accessories'], label: 'Subcategory' },
-          ageGroup: { type: 'select', options: ['0-2 years', '3-5 years', '6-8 years', '9-12 years', '13+ years'], label: 'Age Group' },
-          sizes: {
-            type: 'multi-select',
-            options: isKidsFootwear
-              ? ['S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13', 'Other']
-              : ['XS', 'S', 'M', 'L', 'XL'],
-            label: 'Available Sizes'
-          },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          gender: { type: 'select', options: ['Boys', 'Girls', 'Unisex'], label: 'Gender' },
-          occasion: { type: 'select', options: ['Casual', 'School', 'Party', 'Sports'], label: 'Occasion' },
-          safetyFeatures: { type: 'multi-text', label: 'Safety Features', placeholder: 'e.g., Non-toxic, BPA-free, flame retardant' }
-        };
-      case 'home-lifestyle':
-        return {
-          subcategory: { type: 'select', options: ['Kitchen Tools', 'Home Decor', 'Bedsheets, Curtains & Towels', 'Cleaning & Storage Items'], label: 'Subcategory' },
-          room: { type: 'select', options: ['Living Room', 'Bedroom', 'Kitchen', 'Bathroom', 'Dining Room'], label: 'Room' },
-          material: { type: 'text', label: 'Primary Material' },
-          secondaryMaterial: { type: 'text', label: 'Secondary Material', placeholder: 'e.g., Wood frame, metal legs' },
-          dimensions: { type: 'text', label: 'Dimensions (L x W x H)', placeholder: 'e.g., 120cm x 60cm x 75cm' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          assembly: { type: 'select', options: ['Ready to Use', 'Assembly Required', 'Professional Installation'], label: 'Assembly Required' },
-          warranty: { type: 'text', label: 'Warranty Period', placeholder: 'e.g., 1 year, 2 years' }
-        };
-      case 'accessories':
-        return {
-          subcategory: { type: 'select', options: ['Watches', 'Sunglasses', 'Belts', 'Caps & Hats', 'Wallets & Purses'], label: 'Subcategory' },
-          material: { type: 'text', label: 'Primary Material' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          gender: { type: 'select', options: ['Women', 'Men', 'Unisex'], label: 'Gender' },
-          closure: { type: 'text', label: 'Closure Type', placeholder: 'e.g., Zipper, magnetic, snap' },
-          capacity: { type: 'text', label: 'Capacity/Size', placeholder: 'e.g., 15L, 20cm x 15cm' }
-        };
-      case 'beauty':
-        return {
-          subcategory: { type: 'select', options: ['Skincare', 'Makeup', 'Haircare', 'Fragrance', 'Bath & Body', "Men's Grooming", 'Tools & Brushes'], label: 'Subcategory' },
-          skinType: { type: 'multi-select', options: ['Dry', 'Oily', 'Combination', 'Sensitive', 'Normal'], label: 'Suitable Skin Types' },
-          finish: { type: 'select', options: ['Matte', 'Dewy', 'Satin', 'Natural'], label: 'Finish' },
-          coverage: { type: 'select', options: ['Light', 'Medium', 'Full'], label: 'Coverage' },
-          shades: { type: 'multi-text', label: 'Available Shades', placeholder: 'Enter shades separated by commas' },
-          volume: { type: 'text', label: 'Volume/Size', placeholder: 'e.g., 30ml, 50g' },
-          ingredients: { type: 'text', label: 'Key Ingredients', placeholder: 'e.g., Hyaluronic acid, Vitamin C' },
-          spf: { type: 'text', label: 'SPF Level', placeholder: 'e.g., SPF 30, SPF 50' }
-        };
-      case 'sportswear':
-        return {
-          subcategory: { type: 'select', options: ['Activewear Tops', 'Bottoms', 'Tracksuits', 'Swimwear', 'Innerwear', 'Shoes', 'Accessories'], label: 'Subcategory' },
-          activity: { type: 'multi-select', options: ['Running', 'Gym', 'Yoga', 'Swimming', 'Cycling', 'Tennis'], label: 'Suitable Activities' },
-          sizes: { type: 'multi-select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], label: 'Available Sizes' },
-          colors: { type: 'multi-text', label: 'Available Colors', placeholder: 'Enter colors separated by commas' },
-          gender: { type: 'select', options: ['Men', 'Women', 'Unisex'], label: 'Gender' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' },
-          fabric: { type: 'text', label: 'Fabric Type', placeholder: 'e.g., Polyester, Cotton blend' },
-          features: { type: 'multi-text', label: 'Features', placeholder: 'e.g., Moisture-wicking, UV protection' }
-        };
-      case 'gifting-guide':
-        return {
-          subcategory: { type: 'select', options: ['Birthday', 'Anniversary', 'Wedding', 'Festivals', 'Corporate'], label: 'Subcategory' },
-          occasion: { type: 'multi-select', options: ['Birthday', 'Anniversary', 'Wedding', 'Holiday', 'Graduation'], label: 'Suitable Occasions' },
-          recipient: { type: 'select', options: ['Men', 'Women', 'Kids', 'Couples', 'Family'], label: 'Recipient' },
-          priceRange: { type: 'select', options: ['Under ₹1000', '₹1000-5000', '₹5000-10000', '₹10000+'], label: 'Price Range' },
-          giftType: { type: 'select', options: ['Physical Product', 'Experience', 'Subscription', 'Digital'], label: 'Gift Type' },
-          packaging: { type: 'select', options: ['Standard', 'Gift Box', 'Premium Packaging', 'Custom'], label: 'Packaging' }
-        };
-      default:
-        return {};
-    }
-  };
-
   // Handle click outside dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setCategoryDropdownOpen(false);
-      }
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setStatusDropdownOpen(false);
       }
-      if (subcategoryDropdownRef.current && !subcategoryDropdownRef.current.contains(event.target as Node)) {
-        setSubcategoryDropdownOpen(false);
-      }
     };
 
-    if (categoryDropdownOpen || statusDropdownOpen || subcategoryDropdownOpen) {
+    if (statusDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [categoryDropdownOpen, statusDropdownOpen, subcategoryDropdownOpen]);
+  }, [statusDropdownOpen]);
 
   // Handle click outside overlay
   useEffect(() => {
@@ -1030,6 +852,8 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
       price: 0,
       originalPrice: 0,
       category: '',
+      subcategory: '',
+      subcategoryName: '',
       brand: '',
       image: '',
       images: [],
@@ -1055,17 +879,21 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     const hasPrice = formData.price > 0;
     const hasOriginalPrice = formData.originalPrice > 0;
     const hasCategory = formData.category !== '';
+    const hasSubcategory = formData.subcategory !== '';
     const hasStock = formData.stock >= 1;
-    const hasImage = formData.image.trim() !== ''; // At least one image must be loaded
+    const hasImage = formData.image.trim() !== '';
 
-    // Check if at least one size is selected (for categories that have sizes)
-    const categoryFields = getCategorySpecificFields(formData.category, categorySpecificData);
+    const categoryFields = getCategorySpecificFields(
+      formData.category,
+      categorySpecificData,
+      formData.subcategoryName
+    );
     const hasSizesField = 'sizes' in categoryFields && categoryFields.sizes?.type === 'multi-select';
     const hasSizes = hasSizesField
       ? (categorySpecificData.sizes && Array.isArray(categorySpecificData.sizes) && categorySpecificData.sizes.length > 0)
-      : true; // If category doesn't have sizes field, skip this check
+      : true;
 
-    return hasName && hasBrand && hasPrice && hasOriginalPrice && hasCategory && hasStock && hasImage && hasSizes;
+    return hasName && hasBrand && hasPrice && hasOriginalPrice && hasCategory && hasSubcategory && hasStock && hasImage && hasSizes;
   };
 
   // Edit existing product: prefill the form and open modal
@@ -1078,6 +906,8 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
       price: product.price,
       originalPrice: product.originalPrice || 0,
       category: product.category,
+      subcategory: product.subcategory || product.categorySpecificData?.subcategory || '',
+      subcategoryName: product.subcategoryName || product.categorySpecificData?.subcategory || '',
       brand: product.brand,
       image: product.image,
       images: product.images || [],
@@ -1113,12 +943,26 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
         displayName: userData?.displayName || currentUser.displayName
       });
 
+      const seoFields = buildProductSeoFields({
+        name: formData.name,
+        brand: formData.brand,
+        category: formData.category,
+        subcategory: formData.subcategory,
+        subcategoryName: formData.subcategoryName,
+        tags: formData.tags,
+        sellerName: userData?.displayName || currentUser.displayName,
+        description: formData.description,
+        existingSlug: editingProduct?.slug,
+        productId: editingProduct?.id,
+      });
+
       const productData = {
         ...formData,
+        ...seoFields,
         sellerId: currentUser.uid,
         sellerName: userData?.displayName || currentUser.displayName,
         categorySpecificData,
-        createdAt: new Date(),
+        createdAt: editingProduct ? formData.createdAt : new Date(),
         updatedAt: new Date()
       };
 
@@ -2232,7 +2076,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                               {/* Clickable Product Link */}
                               <Link
-                                href={`/product/${product.id}`}
+                                href={getProductPath(product)}
                                 className="block hover:opacity-90 transition-opacity cursor-pointer"
                               >
                                 {/* Product Image */}
@@ -2424,61 +2268,27 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                           <p className="text-xs text-gray-500 mt-1">Enter MRP for discount calculation</p>
                         </div>
 
-                        <div>
-                          <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                            Category *
-                          </label>
-                          <div className="relative" ref={dropdownRef}>
-                            <button
-                              type="button"
-                              onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white text-left flex items-center justify-between hover:border-gray-400 transition-colors duration-200"
-                            >
-                              <span className="flex items-center space-x-2">
-                                {formData.category ? (
-                                  <>
-                                    <span className="text-lg">
-                                      {categories.find(c => c.value === formData.category)?.icon}
-                                    </span>
-                                    <span className="text-gray-900">
-                                      {categories.find(c => c.value === formData.category)?.label}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="text-gray-500">Select Category</span>
-                                )}
-                              </span>
-                              <svg
-                                className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''
-                                  }`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-
-                            {categoryDropdownOpen && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                {categories.map(category => (
-                                  <button
-                                    key={category.value}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormData({ ...formData, category: category.value });
-                                      setCategorySpecificData({}); // Reset category-specific data
-                                      setCategoryDropdownOpen(false);
-                                    }}
-                                    className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none flex items-center space-x-3 transition-colors duration-150"
-                                  >
-                                    <span className="text-lg">{category.icon}</span>
-                                    <span className="text-gray-900 font-medium">{category.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                        <div className="md:col-span-2">
+                          <ProductCategoryPicker
+                            category={formData.category}
+                            subcategory={formData.subcategory || ''}
+                            onCategoryChange={(categorySlug) => {
+                              setFormData({
+                                ...formData,
+                                category: categorySlug,
+                                subcategory: '',
+                                subcategoryName: '',
+                              });
+                              setCategorySpecificData({});
+                            }}
+                            onSubcategoryChange={(subcategorySlug, subcategoryName) => {
+                              setFormData({
+                                ...formData,
+                                subcategory: subcategorySlug,
+                                subcategoryName,
+                              });
+                            }}
+                          />
                         </div>
 
                         <div>
@@ -2652,33 +2462,16 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                       </div>
 
                       {/* Category-Specific Fields */}
-                      {Object.keys(getCategorySpecificFields(formData.category)).length > 0 && (
+                      {Object.keys(getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName)).length > 0 && (
                         <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
                           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Tag className="w-5 h-5 mr-2 text-blue-600" />
-                            {categories.find(c => c.value === formData.category)?.icon} {categories.find(c => c.value === formData.category)?.label} Specific Details
+                            {topLevelCategories.find((c) => c.slug === formData.category)?.icon}{' '}
+                            {topLevelCategories.find((c) => c.slug === formData.category)?.name} Specific Details
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries(getCategorySpecificFields(formData.category, categorySpecificData)).map(([key, field]) => {
-                              // Re-check sizes for footwear subcategories
-                              let sizeOptions: string[] | undefined;
-
-                              if (key === 'sizes') {
-                                if (formData.category === 'kids' && categorySpecificData?.subcategory === 'Footwear') {
-                                  sizeOptions = ['S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13', 'Other'];
-                                } else if (formData.category === 'footwear') {
-                                  const subcategory = categorySpecificData?.subcategory;
-                                  if (subcategory === 'Kids Footwear') {
-                                    sizeOptions = ['S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13', 'Other'];
-                                  } else if (subcategory === 'Men\'s Footwear') {
-                                    sizeOptions = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', 'Other'];
-                                  } else if (subcategory === 'Women\'s Footwear') {
-                                    sizeOptions = ['4', '5', '6', '7', '8', '9', '10', '11', '12', 'Other'];
-                                  }
-                                }
-                              }
-
-                              const currentField = sizeOptions ? { ...field, options: sizeOptions } : field;
+                            {Object.entries(getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName)).map(([key, field]) => {
+                              const currentField = field;
                               return (
                                 <div key={key} className={currentField.type === 'multi-text' ? 'md:col-span-2' : ''}>
                                   <label htmlFor={`category-${key}`} className="block text-sm font-medium text-gray-700 mb-2">
@@ -2686,41 +2479,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                     {currentField.type === 'multi-select' && <span className="text-red-500 ml-1">*</span>}
                                   </label>
 
-                                  {key === 'subcategory' ? (
-                                    <div className="relative" ref={subcategoryDropdownRef}>
-                                      <button
-                                        type="button"
-                                        onClick={() => setSubcategoryDropdownOpen(!subcategoryDropdownOpen)}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-left flex items-center justify-between hover:border-gray-400 transition-colors duration-200"
-                                        title="Select Subcategory"
-                                        aria-label="Select Subcategory"
-                                      >
-                                        <span className="text-gray-900">
-                                          {categorySpecificData.subcategory || 'Select Subcategory'}
-                                        </span>
-                                        <svg className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${subcategoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                      </button>
-                                      {subcategoryDropdownOpen && (
-                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                          {currentField.options.map((option: string) => (
-                                            <button
-                                              key={option}
-                                              type="button"
-                                              onClick={() => {
-                                                setCategorySpecificData({ ...categorySpecificData, subcategory: option });
-                                                setSubcategoryDropdownOpen(false);
-                                              }}
-                                              className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none transition-colors duration-150"
-                                            >
-                                              <span className="text-gray-900 font-medium">{option}</span>
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : currentField.type === 'select' ? (
+                                  {currentField.type === 'select' ? (
                                     <select
                                       id={`category-${key}`}
                                       value={categorySpecificData[key] || ''}
@@ -2876,7 +2635,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             {formData.stock < 1 && <li>Stock Quantity must be at least 1</li>}
                             {formData.image.trim() === '' && <li>At least one product image must be uploaded</li>}
                             {(() => {
-                              const categoryFields = getCategorySpecificFields(formData.category, categorySpecificData);
+                              const categoryFields = getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName);
                               const hasSizesField = 'sizes' in categoryFields && categoryFields.sizes?.type === 'multi-select';
                               const hasSizes = hasSizesField
                                 ? (categorySpecificData.sizes && Array.isArray(categorySpecificData.sizes) && categorySpecificData.sizes.length > 0)

@@ -13,6 +13,10 @@ import ImageUpload from '@/components/common/ImageUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
+import { useCategories } from '@/hooks/useCategories';
+import { formatCategoryName } from '@/lib/categories/format';
+import { buildProductSeoFields } from '@/utils/productSeo';
 
 interface Product {
   id?: string;
@@ -21,6 +25,11 @@ interface Product {
   price: number;
   originalPrice?: number;
   category: string;
+  subcategory?: string;
+  subcategoryName?: string;
+  categoryPath?: string[];
+  slug?: string;
+  searchKeywords?: string[];
   brand: string;
   image: string;
   images?: string[];
@@ -51,7 +60,9 @@ const ProductManagementPage: React.FC = () => {
     description: '',
     price: 0,
     originalPrice: 0,
-    category: 'electronics',
+    category: '',
+    subcategory: '',
+    subcategoryName: '',
     brand: '',
     image: '',
     images: [],
@@ -66,25 +77,9 @@ const ProductManagementPage: React.FC = () => {
   });
 
   const [categorySpecificData, setCategorySpecificData] = useState<Record<string, any>>({});
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
-
-  const categories = [
-    { value: 'women', label: 'Women', icon: '👗' },
-    { value: 'men', label: 'Men', icon: '👨' },
-    { value: 'footwear', label: 'Footwear', icon: '👟' },
-    { value: 'jewellery', label: 'Jewellery', icon: '💍' },
-    { value: 'lingerie', label: 'Lingerie', icon: '👙' },
-    { value: 'watches', label: 'Watches', icon: '⌚' },
-    { value: 'gifting-guide', label: 'Gifting Guide', icon: '🎁' },
-    { value: 'kids', label: 'Kids', icon: '👶' },
-    { value: 'home-lifestyle', label: 'Home & Lifestyle', icon: '🏠' },
-    { value: 'accessories', label: 'Accessories', icon: '👜' },
-    { value: 'beauty', label: 'Beauty by Tira', icon: '💄' },
-    { value: 'sportswear', label: 'Sportswear', icon: '⚽' }
-  ];
+  const { topLevel: topLevelCategories } = useCategories();
 
   const statusOptions = [
     { value: 'active', label: 'Active', icon: '✅', color: 'text-green-600' },
@@ -189,22 +184,16 @@ const ProductManagementPage: React.FC = () => {
   // Handle click outside dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setCategoryDropdownOpen(false);
-      }
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setStatusDropdownOpen(false);
       }
     };
 
-    if (categoryDropdownOpen || statusDropdownOpen) {
+    if (statusDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [categoryDropdownOpen, statusDropdownOpen]);
+  }, [statusDropdownOpen]);
 
   // Load products
   const loadProducts = async () => {
@@ -247,8 +236,21 @@ const ProductManagementPage: React.FC = () => {
     setLoading(true);
 
     try {
+      const seoFields = buildProductSeoFields({
+        name: formData.name,
+        brand: formData.brand,
+        category: formData.category,
+        subcategory: formData.subcategory,
+        subcategoryName: formData.subcategoryName,
+        tags: formData.tags,
+        description: formData.description,
+        existingSlug: editingProduct?.slug,
+        productId: editingProduct?.id,
+      });
+
       const productData = {
         ...formData,
+        ...seoFields,
         categorySpecificData: categorySpecificData,
         updatedAt: new Date()
       };
@@ -285,7 +287,9 @@ const ProductManagementPage: React.FC = () => {
       description: '',
       price: '' as any,
       originalPrice: '' as any,
-      category: 'electronics',
+      category: '',
+      subcategory: '',
+      subcategoryName: '',
       brand: '',
       image: '',
       images: [],
@@ -598,61 +602,27 @@ const ProductManagementPage: React.FC = () => {
                       <p className="text-xs text-gray-500 mt-1">Enter MRP for discount calculation (optional)</p>
                     </div>
 
-                    <div>
-                      <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                        Category *
-                      </label>
-                      <div className="relative" ref={dropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white text-left flex items-center justify-between hover:border-gray-400 transition-colors duration-200"
-                        >
-                          <span className="flex items-center space-x-2">
-                            {formData.category ? (
-                              <>
-                                <span className="text-lg">
-                                  {categories.find(c => c.value === formData.category)?.icon}
-                                </span>
-                                <span className="text-gray-900">
-                                  {categories.find(c => c.value === formData.category)?.label}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-gray-500">Select Category</span>
-                            )}
-                          </span>
-                          <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''
-                              }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-
-                        {categoryDropdownOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {categories.map(category => (
-                              <button
-                                key={category.value}
-                                type="button"
-                                onClick={() => {
-                                  setFormData({ ...formData, category: category.value });
-                                  setCategorySpecificData({}); // Reset category-specific data
-                                  setCategoryDropdownOpen(false);
-                                }}
-                                className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none flex items-center space-x-3 transition-colors duration-150"
-                              >
-                                <span className="text-lg">{category.icon}</span>
-                                <span className="text-gray-900 font-medium">{category.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                    <div className="md:col-span-2">
+                      <ProductCategoryPicker
+                        category={formData.category}
+                        subcategory={formData.subcategory || ''}
+                        onCategoryChange={(categorySlug) => {
+                          setFormData({
+                            ...formData,
+                            category: categorySlug,
+                            subcategory: '',
+                            subcategoryName: '',
+                          });
+                          setCategorySpecificData({});
+                        }}
+                        onSubcategoryChange={(subcategorySlug, subcategoryName) => {
+                          setFormData({
+                            ...formData,
+                            subcategory: subcategorySlug,
+                            subcategoryName,
+                          });
+                        }}
+                      />
                     </div>
 
                     <div>
@@ -830,7 +800,8 @@ const ProductManagementPage: React.FC = () => {
                     <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <Tag className="w-5 h-5 mr-2 text-blue-600" />
-                        {categories.find(c => c.value === formData.category)?.icon} {categories.find(c => c.value === formData.category)?.label} Specific Details
+                        {topLevelCategories.find((c) => c.slug === formData.category)?.icon}{' '}
+                        {topLevelCategories.find((c) => c.slug === formData.category)?.name} Specific Details
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {Object.entries(getCategorySpecificFields(formData.category)).map(([key, field]) => (

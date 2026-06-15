@@ -5,6 +5,7 @@ import { Heart, ArrowLeft, ShoppingCart, Eye, Trash2 } from 'lucide-react';
 import { useWishlist } from '../contexts/WishlistContext';
 import { useCart } from '../contexts/CartContext';
 import FastImage from '../components/common/FastImage';
+import { getProductPath } from '@/utils/productUrls';
 
 const WishlistPage: React.FC = () => {
   const { wishlistItems, removeFromWishlist, loading } = useWishlist();
@@ -112,7 +113,7 @@ const WishlistPage: React.FC = () => {
                         <Heart className="w-4 h-4 text-red-500 fill-current" />
                       </button>
                       <Link
-                        href={`/product/${item.productId}`}
+                        href={getProductPath({ id: item.productId, slug: item.slug })}
                         className="p-2 bg-white rounded-full shadow-lg hover:shadow-xl transition-all"
                         title="View details"
                       >

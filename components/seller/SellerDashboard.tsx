@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   TrendingUp, TrendingDown, DollarSign, Package, Users, 
   Eye, ShoppingCart, Star, BarChart3, PieChart, 
   Calendar, Filter, Download, RefreshCw, ArrowUpRight,
-  ArrowDownRight, Activity, Target, Award, Clock
+  ArrowDownRight, Activity, Target, Award, Clock, Bell
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
@@ -601,7 +602,14 @@ const SellerDashboard: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            <select 
+            <Link
+              href="/seller/orders"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
+            >
+              <Bell className="w-4 h-4" />
+              Order Inbox
+            </Link>
+            <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
