@@ -1,18 +1,14 @@
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  sendPasswordResetEmail,
-  updateProfile,
-  User,
-  UserCredential,
-  GoogleAuthProvider,
-  signInWithPopup,
-  FacebookAuthProvider
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { auth, db } from './config';
-import { isSellerEmail } from './sellerSetup';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+
+export interface AppUser extends SupabaseUser {
+  /** Legacy business/profile id used by migrated foreign keys. */
+  uid: string;
+  displayName: string | null;
+  photoURL: string | null;
+  phoneNumber: string | null;
+  emailVerified: boolean;
+}
 
 export interface UserData {
   uid: string;
@@ -22,8 +18,7 @@ export interface UserData {
   phone?: string;
   address?: string;
   profileImage?: string;
-  adminEmails?: string[]; // Array of admin emails
-  // Business-related properties for sellers
+  adminEmails?: string[];
   businessName?: string;
   businessType?: string;
   businessDescription?: string;
@@ -49,501 +44,452 @@ export interface UserData {
   isEmailVerified: boolean;
 }
 
-// Sign up with email and password
-export const signUp = async (
+function dateValue(value: unknown): Date {
+  if (value instanceof Date) return value;
+  const date = value ? new Date(String(value)) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function mapProfile(row: any): UserData {
+  const raw = row.raw || {};
+  return {
+    ...raw,
+    uid: row.id,
+    email: row.email || raw.email || '',
+    displayName: row.display_name || raw.displayName || '',
+    role: row.role || raw.role || 'user',
+    phone: row.phone || raw.phone || '',
+    address: row.address || raw.address || '',
+    profileImage: row.avatar_path || row.avatar_url || raw.profileImage || '',
+    createdAt: dateValue(row.created_at || raw.createdAt),
+    updatedAt: dateValue(row.updated_at || raw.updatedAt),
+    lastLoginAt: row.last_login_at
+      ? dateValue(row.last_login_at)
+      : raw.lastLoginAt
+        ? dateValue(raw.lastLoginAt)
+        : undefined,
+    isEmailVerified: Boolean(
+      row.is_email_verified ?? raw.isEmailVerified ?? false
+    ),
+  };
+}
+
+export function toAppUser(user: SupabaseUser, profile?: UserData | null): AppUser {
+  const metadata = user.user_metadata || {};
+  const firebaseUid = metadata.fbuser?.uid;
+  return Object.assign(user, {
+    uid: profile?.uid || firebaseUid || user.id,
+    displayName:
+      profile?.displayName || metadata.display_name || metadata.full_name || null,
+    photoURL: profile?.profileImage || metadata.avatar_url || null,
+    phoneNumber: profile?.phone || user.phone || null,
+    emailVerified: Boolean(user.email_confirmed_at),
+  });
+}
+
+async function getProfileByAuthId(authUserId: string) {
+  const { data, error } = await getSupabaseBrowserClient()
+    .from('profiles')
+    .select('*')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function ensureProfile(user: SupabaseUser): Promise<UserData> {
+  let row = await getProfileByAuthId(user.id);
+  if (!row) {
+    const metadata = user.user_metadata || {};
+    const profileId = metadata.fbuser?.uid || user.id;
+    const now = new Date().toISOString();
+    const newProfile = {
+      id: profileId,
+      auth_user_id: user.id,
+      email: user.email || '',
+      display_name: metadata.display_name || metadata.full_name || 'User',
+      avatar_url: metadata.avatar_url || null,
+      phone: user.phone || '',
+      role: 'user',
+      is_email_verified: Boolean(user.email_confirmed_at),
+      created_at: now,
+      updated_at: now,
+      last_login_at: now,
+      raw: {
+        uid: profileId,
+        email: user.email || '',
+        displayName: metadata.display_name || metadata.full_name || 'User',
+        role: 'user',
+      },
+    };
+
+    const { data, error } = await getSupabaseBrowserClient()
+      .from('profiles')
+      .insert(newProfile)
+      .select('*')
+      .single();
+    if (error) throw error;
+    row = data;
+  }
+
+  return mapProfile(row);
+}
+
+export async function signUp(
   email: string,
   password: string,
   displayName: string,
   role: 'user' | 'shop' | 'admin' = 'user',
   phone?: string,
   address?: string
-): Promise<UserCredential> => {
-  try {
-    // Create user account
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+) {
+  const client = getSupabaseBrowserClient();
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { display_name: displayName },
+    },
+  });
+  if (error) throw error;
+  if (!data.user) throw new Error('Supabase did not create the user.');
 
-    // Update user profile
-    await updateProfile(user, {
-      displayName: displayName
-    });
-
-    // Create user document in Firestore
-    const userData: UserData = {
-      uid: user.uid,
-      email: user.email!,
-      displayName: displayName,
-      role: role,
+  if (data.session) {
+    const profile = await ensureProfile(data.user);
+    await updateUserData(profile.uid, {
+      displayName,
+      role,
       phone: phone || '',
       address: address || '',
-      profileImage: '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastLoginAt: new Date(),
-      isEmailVerified: user.emailVerified
-    };
-
-    await setDoc(doc(db, 'users', user.uid), userData);
-
-    return userCredential;
-  } catch (error) {
-    console.error('Error signing up:', error);
-    throw error;
-  }
-};
-
-// Sign in with email and password
-export const signIn = async (email: string, password: string): Promise<UserCredential> => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Update last login time in Firestore
-    await updateUserData(user.uid, {
-      lastLoginAt: new Date(),
-      updatedAt: new Date()
     });
-
-    return userCredential;
-  } catch (error) {
-    console.error('Error signing in:', error);
-    throw error;
   }
-};
 
-// Sign in with Google
-export const signInWithGoogle = async (): Promise<UserCredential> => {
-  try {
-    const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    const user = userCredential.user;
+  return data;
+}
 
-    // Check if user exists in Firestore
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
+export async function signIn(email: string, password: string) {
+  const client = getSupabaseBrowserClient();
+  const { data, error } = await client.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (error) throw error;
 
-    if (!userDoc.exists()) {
-      // Create user document if it doesn't exist
-      const userData: UserData = {
-        uid: user.uid,
-        email: user.email!,
-        displayName: user.displayName || 'User',
-        role: 'user',
-        phone: '',
-        address: '',
-        profileImage: user.photoURL || '',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastLoginAt: new Date(),
-        isEmailVerified: user.emailVerified
-      };
-      await setDoc(userDocRef, userData);
-    } else {
-      // Update last login
-      await updateUserData(user.uid, {
-        lastLoginAt: new Date(),
-        updatedAt: new Date()
-      });
-    }
-
-    return userCredential;
-  } catch (error) {
-    console.error('Error signing in with Google:', error);
-    throw error;
+  if (data.user) {
+    const profile = await ensureProfile(data.user);
+    await updateUserData(profile.uid, { lastLoginAt: new Date() });
   }
-};
+  return data;
+}
 
-// Sign in with Facebook
-export const signInWithFacebook = async (): Promise<UserCredential> => {
-  try {
-    const provider = new FacebookAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    const user = userCredential.user;
+export async function signInWithGoogle() {
+  const { data, error } = await getSupabaseBrowserClient().auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: `${window.location.origin}/profile` },
+  });
+  if (error) throw error;
+  return data;
+}
 
-    // Check if user exists in Firestore
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
+export async function signInWithFacebook() {
+  const { data, error } = await getSupabaseBrowserClient().auth.signInWithOAuth({
+    provider: 'facebook',
+    options: { redirectTo: `${window.location.origin}/profile` },
+  });
+  if (error) throw error;
+  return data;
+}
 
-    if (!userDoc.exists()) {
-      // Create user document if it doesn't exist
-      const userData: UserData = {
-        uid: user.uid,
-        email: user.email!,
-        displayName: user.displayName || 'User',
-        role: 'user',
-        phone: '',
-        address: '',
-        profileImage: user.photoURL || '',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastLoginAt: new Date(),
-        isEmailVerified: user.emailVerified
-      };
-      await setDoc(userDocRef, userData);
-    } else {
-      // Update last login
-      await updateUserData(user.uid, {
-        lastLoginAt: new Date(),
-        updatedAt: new Date()
-      });
-    }
+export async function signOutUser(): Promise<void> {
+  const { error } = await getSupabaseBrowserClient().auth.signOut();
+  if (error) throw error;
+}
 
-    return userCredential;
-  } catch (error) {
-    console.error('Error signing in with Facebook:', error);
-    throw error;
-  }
-};
+export async function resetPassword(email: string): Promise<void> {
+  const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(
+    email,
+    { redirectTo: `${window.location.origin}/auth?mode=reset` }
+  );
+  if (error) throw error;
+}
 
-// Sign out
-export const signOutUser = async (): Promise<void> => {
-  try {
-    await signOut(auth);
-  } catch (error) {
-    console.error('Error signing out:', error);
-    throw error;
-  }
-};
+export async function listAllAdmins() {
+  const { data, error } = await getSupabaseBrowserClient()
+    .from('admins')
+    .select('*');
+  if (error) throw error;
+  return (data || []).map((row) => ({ id: row.id, data: row }));
+}
 
-// Reset password
-export const resetPassword = async (email: string): Promise<void> => {
-  try {
-    await sendPasswordResetEmail(auth, email);
-  } catch (error) {
-    console.error('Error resetting password:', error);
-    throw error;
-  }
-};
+export async function isAdminEmail(email: string): Promise<boolean> {
+  const { data, error } = await getSupabaseBrowserClient()
+    .from('admins')
+    .select('id')
+    .ilike('email', email)
+    .limit(1);
+  if (error) return false;
+  return Boolean(data?.length);
+}
 
-// Debug function to list all admins in the collection
-export const listAllAdmins = async () => {
-  try {
-    console.log('🔍 Listing all admins in collection...');
-    const adminsQuery = query(collection(db, 'admins'));
-    const snapshot = await getDocs(adminsQuery);
-    console.log('📋 Total admins found:', snapshot.docs.length);
-    snapshot.docs.forEach(doc => {
-      console.log('📄 Admin document ID:', doc.id, 'Data:', doc.data());
-    });
-    return snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() }));
-  } catch (error) {
-    console.error('❌ Error listing admins:', error);
-    return [];
-  }
-};
+export async function getUserData(
+  uid: string,
+  userEmail?: string
+): Promise<UserData | null> {
+  const client = getSupabaseBrowserClient();
+  let query = client.from('profiles').select('*');
+  query = uid.includes('-') && uid.length === 36
+    ? query.or(`id.eq.${uid},auth_user_id.eq.${uid}`)
+    : query.eq('id', uid);
 
-// Check if email exists in admins collection (search by email field, not document ID)
-export const isAdminEmail = async (email: string): Promise<boolean> => {
-  try {
-    console.log('🔍 Checking if email exists in admins collection:', email);
-
-    // Query the admins collection where email field matches the given email
-    const adminsQuery = query(
-      collection(db, 'admins'),
-      where('email', '==', email)
-    );
-
-    const snapshot = await getDocs(adminsQuery);
-    const exists = !snapshot.empty;
-
-    console.log('📋 Admin document exists (by email field):', exists);
-    if (exists) {
-      console.log('📄 Admin document data:', snapshot.docs[0].data());
-      console.log('📄 Admin document ID:', snapshot.docs[0].id);
-    }
-
-    return exists;
-  } catch (error) {
-    console.error('❌ Error checking admin email:', error);
-    return false;
-  }
-};
-
-// Get user data from Firestore
-export const getUserData = async (uid: string, userEmail?: string): Promise<UserData | null> => {
-  try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data() as UserData;
-
-      const emailToCheck = userEmail || userData.email;
-      console.log('Checking admin for email:', emailToCheck);
-      console.log('User adminEmails:', userData.adminEmails);
-
-      // Check if user is an admin by checking:
-      // 1. If their email is in the user's adminEmails array
-      // 2. If their email exists in the admins collection
-      let isAdmin = false;
-
-      console.log('🔍 Starting admin check for:', emailToCheck);
-      console.log('📧 User adminEmails array:', userData.adminEmails);
-
-      if (emailToCheck && userData.adminEmails && userData.adminEmails.includes(emailToCheck)) {
-        isAdmin = true;
-        console.log('✅ User is admin via adminEmails array');
-      } else {
-        console.log('❌ Not found in adminEmails array, checking admins collection...');
-        const isInAdminsCollection = await isAdminEmail(emailToCheck);
-        if (isInAdminsCollection) {
-          isAdmin = true;
-          console.log('✅ User is admin via admins collection');
-        } else {
-          console.log('❌ Not found in admins collection either');
-        }
-      }
-
-      if (isAdmin) {
-        // Update user role to admin
-        userData.role = 'admin';
-        await updateUserData(uid, { role: 'admin' });
-        console.log('🎉 Admin role assigned to:', emailToCheck);
-      } else {
-        console.log('❌ User is not an admin. Email:', emailToCheck, 'Admin emails:', userData.adminEmails);
-      }
-
-      // Check if user is a seller by checking if their email is in the sellers collection
-      if (emailToCheck && userData.role !== 'admin') {
-        const isSeller = await isSellerEmail(emailToCheck);
-        if (isSeller) {
-          // Update user role to shop (seller)
-          userData.role = 'shop';
-          await updateUserData(uid, { role: 'shop' });
-          console.log('Seller role assigned to:', emailToCheck);
-        } else {
-          console.log('User is not a seller. Email:', emailToCheck);
-        }
-      }
-
-      return userData;
+  const { data: row, error } = await query.maybeSingle();
+  if (error) throw error;
+  if (!row) {
+    const {
+      data: { user },
+    } = await client.auth.getUser();
+    if (user && user.id === uid) {
+      return ensureProfile(user);
     }
     return null;
-  } catch (error) {
-    console.error('Error getting user data:', error);
-    throw error;
   }
-};
 
-// Update user data
-export const updateUserData = async (uid: string, data: Partial<UserData>): Promise<void> => {
-  try {
-    await setDoc(doc(db, 'users', uid), {
-      ...data,
-      updatedAt: new Date()
-    }, { merge: true });
-  } catch (error) {
-    console.error('Error updating user data:', error);
-    throw error;
+  const profile = mapProfile(row);
+  const email = userEmail || profile.email;
+
+  if (email && (await isAdminEmail(email))) {
+    profile.role = 'admin';
+  } else {
+    const { data: seller } = await client
+      .from('sellers')
+      .select('id')
+      .eq('user_id', profile.uid)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (seller) profile.role = 'shop';
   }
-};
 
-// Update user profile (for profile page)
-export const updateUserProfile = async (uid: string, profileData: {
-  displayName?: string;
-  phone?: string;
-  address?: string;
-  profileImage?: string;
-  bannerImage?: string;
-  businessName?: string;
-  businessType?: string;
-  businessDescription?: string;
-  businessAddress?: string;
-  location?: any;
-  instagramUrl?: string;
-  facebookUrl?: string;
-}): Promise<void> => {
-  try {
-    console.log('updateUserProfile called with:', { uid, profileData });
+  return profile;
+}
 
-    // Update Firebase Auth profile
-    if (profileData.displayName) {
-      await updateProfile(auth.currentUser!, {
-        displayName: profileData.displayName
-      });
-      console.log('Firebase Auth profile updated');
-    }
+export async function updateUserData(
+  uid: string,
+  data: Partial<UserData>
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  const { data: existing, error: readError } = await client
+    .from('profiles')
+    .select('raw')
+    .eq('id', uid)
+    .single();
+  if (readError) throw readError;
 
-    // Update Firestore document
-    const updateData = {
-      ...profileData,
-      updatedAt: new Date()
-    };
-    console.log('Updating Firestore with:', updateData);
-
-    await updateUserData(uid, updateData);
-    console.log('Firestore update completed');
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    throw error;
+  const rawUpdates: Record<string, unknown> = { ...data };
+  for (const [key, value] of Object.entries(rawUpdates)) {
+    if (value instanceof Date) rawUpdates[key] = value.toISOString();
   }
-};
 
-// Submit seller application
-export const submitSellerApplication = async (uid: string, applicationData: any): Promise<string> => {
-  try {
-    // First, save the application to a separate collection
-    const { addDoc, collection } = await import('firebase/firestore');
-    const { db } = await import('./config');
+  const update: Record<string, unknown> = {
+    raw: { ...(existing.raw || {}), ...rawUpdates },
+    updated_at: new Date().toISOString(),
+  };
+  if (data.email !== undefined) update.email = data.email;
+  if (data.displayName !== undefined) update.display_name = data.displayName;
+  if (data.phone !== undefined) update.phone = data.phone;
+  if (data.address !== undefined) update.address = data.address;
+  if (data.profileImage !== undefined) update.avatar_url = data.profileImage;
+  if (data.role !== undefined) update.role = data.role;
+  if (data.isEmailVerified !== undefined) {
+    update.is_email_verified = data.isEmailVerified;
+  }
+  if (data.lastLoginAt !== undefined) {
+    update.last_login_at = data.lastLoginAt.toISOString();
+  }
 
-    const applicationDoc = await addDoc(collection(db, 'sellerApplications'), {
+  const { error } = await client.from('profiles').update(update).eq('id', uid);
+  if (error) throw error;
+}
+
+export async function updateUserProfile(
+  uid: string,
+  profileData: {
+    displayName?: string;
+    phone?: string;
+    address?: string;
+    profileImage?: string;
+    bannerImage?: string;
+    businessName?: string;
+    businessType?: string;
+    businessDescription?: string;
+    businessAddress?: string;
+    location?: any;
+    instagramUrl?: string;
+    facebookUrl?: string;
+  }
+): Promise<void> {
+  await updateUserData(uid, profileData as Partial<UserData>);
+
+  if (profileData.displayName) {
+    const { error } = await getSupabaseBrowserClient().auth.updateUser({
+      data: { display_name: profileData.displayName },
+    });
+    if (error) throw error;
+  }
+}
+
+export async function submitSellerApplication(
+  uid: string,
+  applicationData: any
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const row = {
+    id,
+    user_id: uid,
+    business_name: applicationData.businessName || null,
+    business_email: applicationData.businessEmail || applicationData.email || null,
+    business_phone: applicationData.businessPhone || applicationData.phone || null,
+    business_address: applicationData.businessAddress || null,
+    business_description: applicationData.businessDescription || null,
+    business_type: applicationData.businessType || null,
+    categories: applicationData.categories || null,
+    documents: applicationData.documents || null,
+    location: applicationData.location || null,
+    status: 'pending',
+    created_at: now,
+    updated_at: now,
+    raw: {
       ...applicationData,
       userId: uid,
       status: 'pending',
+      submittedAt: now,
+    },
+  };
+
+  const { error } = await getSupabaseBrowserClient()
+    .from('seller_applications')
+    .insert(row);
+  if (error) throw error;
+
+  await updateUserData(uid, {
+    sellerApplication: {
+      status: 'pending',
       submittedAt: new Date(),
-      reviewedAt: null,
-      reviewedBy: null
-    });
+      applicationId: id,
+    },
+  });
+  return id;
+}
 
-    // Update user's application status
-    await updateUserData(uid, {
-      sellerApplication: {
-        status: 'pending',
-        submittedAt: new Date(),
-        applicationId: applicationDoc.id
-      },
-      updatedAt: new Date()
-    });
+export async function hasSellerApplication(uid: string): Promise<boolean> {
+  return (await getSellerApplicationStatus(uid)) !== 'not_applied';
+}
 
-    return applicationDoc.id;
-  } catch (error) {
-    console.error('Error submitting seller application:', error);
-    throw error;
-  }
-};
+export async function getSellerApplicationStatus(
+  uid: string
+): Promise<'not_applied' | 'pending' | 'approved' | 'rejected'> {
+  const { data, error } = await getSupabaseBrowserClient()
+    .from('seller_applications')
+    .select('status')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.status || 'not_applied';
+}
 
-// Check if user has already applied to be a seller
-export const hasSellerApplication = async (uid: string): Promise<boolean> => {
-  try {
-    const userData = await getUserData(uid);
-    return userData?.sellerApplication?.status !== undefined &&
-      userData.sellerApplication.status !== 'not_applied';
-  } catch (error) {
-    console.error('Error checking seller application:', error);
-    return false;
-  }
-};
+export async function approveSellerApplication(
+  uid: string,
+  applicationId: string,
+  approvedBy: string
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  const user = await getUserData(uid);
+  if (!user?.email) throw new Error('User email not found');
+  const now = new Date().toISOString();
 
-// Get seller application status
-export const getSellerApplicationStatus = async (uid: string): Promise<'not_applied' | 'pending' | 'approved' | 'rejected'> => {
-  try {
-    const userData = await getUserData(uid);
-    return userData?.sellerApplication?.status || 'not_applied';
-  } catch (error) {
-    console.error('Error getting seller application status:', error);
-    return 'not_applied';
-  }
-};
+  const { data: application, error: appReadError } = await client
+    .from('seller_applications')
+    .select('*')
+    .eq('id', applicationId)
+    .single();
+  if (appReadError) throw appReadError;
 
-// Approve seller application
-export const approveSellerApplication = async (uid: string, applicationId: string, approvedBy: string): Promise<void> => {
-  try {
-    // Get user data to get their email
-    const userData = await getUserData(uid);
-    if (!userData?.email) {
-      throw new Error('User email not found');
-    }
-
-    // Get the seller application data to copy business information
-    const { getDoc } = await import('firebase/firestore');
-    const { db } = await import('./config');
-    const applicationDoc = await getDoc(doc(db, 'sellerApplications', applicationId));
-
-    if (!applicationDoc.exists()) {
-      throw new Error('Seller application not found');
-    }
-
-    const applicationData = applicationDoc.data();
-    console.log('Application data to copy:', applicationData);
-
-    // Add email to sellers collection (like admin emails system)
-    const { setDoc } = await import('firebase/firestore');
-    await setDoc(doc(db, 'sellers', userData.email), {
-      email: userData.email,
-      uid: uid,
-      applicationId: applicationId,
-      approvedBy: approvedBy,
-      approvedAt: new Date(),
+  const { error: sellerError } = await client.from('sellers').upsert({
+    id: user.email,
+    email: user.email,
+    user_id: uid,
+    application_id: applicationId,
+    approved_at: now,
+    approved_by: approvedBy,
+    is_active: true,
+    role: 'seller',
+    raw: {
+      email: user.email,
+      uid,
+      applicationId,
+      approvedAt: now,
+      approvedBy,
+      isActive: true,
       role: 'seller',
-      isActive: true
-    });
+    },
+  });
+  if (sellerError) throw sellerError;
 
-    // Update user's profile with business information from the application
-    await updateUserData(uid, {
-      role: 'shop',
-      // Copy business information from application
-      businessName: applicationData.businessName || userData.businessName || '',
-      businessType: applicationData.businessType || userData.businessType || '',
-      businessDescription: applicationData.businessDescription || userData.businessDescription || '',
-      businessAddress: applicationData.businessAddress || userData.businessAddress || userData.address || '',
-      phone: applicationData.phone || userData.phone || '',
-      address: applicationData.businessAddress || userData.address || '',
-      location: applicationData.location || userData.location || null,
-      // Keep existing seller application info
-      sellerApplication: {
-        status: 'approved',
-        reviewedAt: new Date(),
-        reviewedBy: approvedBy,
-        applicationId: applicationId
-      },
-      updatedAt: new Date()
-    });
+  const { error: appError } = await client
+    .from('seller_applications')
+    .update({ status: 'approved', reviewed_at: now, reviewed_by: approvedBy })
+    .eq('id', applicationId);
+  if (appError) throw appError;
 
-    // Update the application document in sellerApplications collection
-    const { updateDoc } = await import('firebase/firestore');
-    await updateDoc(doc(db, 'sellerApplications', applicationId), {
+  await updateUserData(uid, {
+    role: 'shop',
+    businessName: application.business_name || '',
+    businessType: application.business_type || '',
+    businessDescription: application.business_description || '',
+    businessAddress: application.business_address || '',
+    sellerApplication: {
       status: 'approved',
       reviewedAt: new Date(),
-      reviewedBy: approvedBy
-    });
+      reviewedBy: approvedBy,
+      applicationId,
+    },
+  });
+}
 
-    console.log(`✅ Seller application approved for user: ${uid}, business data copied to user profile`);
-  } catch (error) {
-    console.error('Error approving seller application:', error);
-    throw error;
-  }
-};
-
-// Reject seller application
-export const rejectSellerApplication = async (uid: string, applicationId: string, rejectedBy: string, reason: string): Promise<void> => {
-  try {
-    // Get user data to get their email
-    const userData = await getUserData(uid);
-    if (userData?.email) {
-      // Remove email from sellers collection if it exists
-      const { deleteDoc, doc } = await import('firebase/firestore');
-      const { db } = await import('./config');
-      try {
-        await deleteDoc(doc(db, 'sellers', userData.email));
-        console.log(`🗑️ Removed seller email from sellers collection: ${userData.email}`);
-      } catch (error) {
-        console.log('Email not found in sellers collection (might not have been approved before)');
-      }
-    }
-
-    // Update user's application status to 'rejected'
-    await updateUserData(uid, {
-      role: 'user', // Reset role to user
-      sellerApplication: {
+export async function rejectSellerApplication(
+  uid: string,
+  applicationId: string,
+  rejectedBy: string,
+  reason: string
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from('seller_applications')
+    .update({
+      status: 'rejected',
+      reviewed_at: now,
+      reviewed_by: rejectedBy,
+      raw: {
         status: 'rejected',
-        reviewedAt: new Date(),
+        reviewedAt: now,
         reviewedBy: rejectedBy,
         rejectionReason: reason,
-        applicationId: applicationId
       },
-      updatedAt: new Date()
-    });
+    })
+    .eq('id', applicationId);
+  if (error) throw error;
 
-    // Update the application document in sellerApplications collection
-    const { updateDoc } = await import('firebase/firestore');
-    await updateDoc(doc(db, 'sellerApplications', applicationId), {
+  await updateUserData(uid, {
+    role: 'user',
+    sellerApplication: {
       status: 'rejected',
       reviewedAt: new Date(),
       reviewedBy: rejectedBy,
-      rejectionReason: reason
-    });
-
-    console.log(`❌ Seller application rejected for user: ${uid}`);
-  } catch (error) {
-    console.error('Error rejecting seller application:', error);
-    throw error;
-  }
-};
+      rejectionReason: reason,
+      applicationId,
+    },
+  });
+}

@@ -7,8 +7,7 @@ import {
   Search, MapPin, Heart, Filter,
   Store, Navigation, Package, TrendingUp, ChevronRight, X, ArrowRight, Star, ShoppingBag, Info
 } from 'lucide-react';
-import { collection, query, getDocs, where, limit } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { getProducts, getSellerProfiles } from '@/lib/supabase/products';
 import { useWishlist } from '../contexts/WishlistContext';
 import { getProductPath } from '@/utils/productUrls';
 import FastImage from '../components/common/FastImage';
@@ -66,21 +65,7 @@ const SearchPage: React.FC = () => {
     const fetchSellers = async () => {
       setLoadingSellers(true);
       try {
-        const usersQuery = query(collection(db, 'users'), where('role', '==', 'shop'));
-        const snapshot = await getDocs(usersQuery);
-        const sellersList: any[] = [];
-
-        snapshot.docs.forEach((doc) => {
-          const userData = doc.data();
-          if (userData.role === 'shop' && userData.sellerApplication?.status === 'approved') {
-            sellersList.push({
-              id: doc.id,
-              ...userData,
-              businessName: userData.businessName || userData.displayName || 'Unknown Shop',
-              stats: userData.stats || { rating: 4.5, totalOrders: 120 }
-            });
-          }
-        });
+        const sellersList = await getSellerProfiles();
 
         if (userLocation) {
           sellersList.sort((a, b) => {
@@ -104,9 +89,9 @@ const SearchPage: React.FC = () => {
     const fetchProducts = async () => {
       setLoadingProducts(true);
       try {
-        const productsQuery = query(collection(db, 'products'), where('status', '==', 'active'));
-        const snapshot = await getDocs(productsQuery);
-        const productsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const productsList = (await getProducts()).filter(
+          (product) => product.status === 'active'
+        );
 
         const productCategorySlugs = Array.from(
           new Set(productsList.map((p: any) => p.category?.toLowerCase()).filter(Boolean))

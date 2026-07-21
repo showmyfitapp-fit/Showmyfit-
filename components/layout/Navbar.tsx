@@ -12,8 +12,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { getProductPath } from '@/utils/productUrls';
 import { logSearchQuery } from '@/lib/analytics/searchAnalytics';
-import { collection, query, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts } from '@/lib/supabase/products';
 
 interface NavbarProps {
   userRole?: 'user' | 'shop' | 'admin';
@@ -51,20 +50,9 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
 
       setLoadingSuggestions(true);
       try {
-        // Fetch products from Firebase
-        const productsQuery = query(collection(db, 'products'));
-        const snapshot = await getDocs(productsQuery);
-
-        const allProducts: any[] = [];
-        snapshot.docs.forEach((doc) => {
-          const productData = doc.data();
-          if (productData.status === 'active') {
-            allProducts.push({
-              id: doc.id,
-              ...productData
-            });
-          }
-        });
+        const allProducts = (await getProducts()).filter(
+          (product) => product.status === 'active'
+        );
 
         // Filter products based on search query with more flexible matching
         const filtered = allProducts.filter(product => {

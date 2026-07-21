@@ -1,14 +1,12 @@
-import { serverGetDocument, serverQueryProducts } from '@/lib/firebase/serverFirestore';
+import { getServerProducts } from '@/lib/supabase/products';
 
 export async function serverFindProductByIdOrSlug(
   identifier: string
 ): Promise<Record<string, unknown> | null> {
-  const byId = await serverGetDocument('products', identifier);
-  if (byId && byId.status === 'active') {
-    return byId;
-  }
-
-  const products = await serverQueryProducts();
-  const bySlug = products.find((product) => product.slug === identifier);
-  return bySlug || null;
+  const products = await getServerProducts();
+  const product = products.find(
+    (candidate) =>
+      candidate.id === identifier || candidate.slug === identifier
+  );
+  return product?.status === 'active' ? product : null;
 }

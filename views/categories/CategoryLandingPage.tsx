@@ -14,8 +14,7 @@ import OptimizedImage from '@/components/common/OptimizedImage';
 import ReserveButton from '@/components/common/ReserveButton';
 import Breadcrumbs from '@/components/common/Breadcrumbs';
 import CategorySEO from '@/components/seo/CategorySEO';
-import { collection, query, getDocs, where } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts, getSellerProfiles } from '@/lib/supabase/products';
 import type { CategoryDocument } from '@/lib/categories/types';
 import { absoluteUrl } from '@/config/site';
 import { getProductPath } from '@/utils/productUrls';
@@ -75,14 +74,11 @@ const CategoryLandingPage: React.FC<CategoryLandingPageProps> = ({
     const fetchData = async () => {
       setLoading(true);
       try {
-        const productsQuery = query(
-          collection(db, 'products'),
-          where('status', '==', 'active')
-        );
-        const productsSnapshot = await getDocs(productsQuery);
-        let productsData = productsSnapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((p) => p.category === category.slug) as Product[];
+        let productsData = (await getProducts())
+          .filter(
+            (product) =>
+              product.status === 'active' && product.category === category.slug
+          ) as Product[];
 
         if (subcategory) {
           productsData = productsData.filter(
@@ -90,11 +86,9 @@ const CategoryLandingPage: React.FC<CategoryLandingPageProps> = ({
           );
         }
 
-        const sellersQuery = query(collection(db, 'users'), where('role', '==', 'shop'));
-        const sellersSnapshot = await getDocs(sellersQuery);
-        const sellersData = sellersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          businessName: doc.data().businessName || doc.data().displayName || 'Shop',
+        const sellersData = (await getSellerProfiles()).map((seller) => ({
+          id: seller.id,
+          businessName: seller.businessName || seller.displayName || 'Shop',
         }));
 
         setProducts(productsData);

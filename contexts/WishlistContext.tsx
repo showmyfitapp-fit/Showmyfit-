@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { collection, doc, getDocs, addDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { useAuth } from './AuthContext';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { resolveStorageImage } from '@/lib/supabase/products';
 
 export interface WishlistItem {
   id: string;
@@ -61,15 +61,26 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       try {
         setLoading(true);
-        const q = query(
-          collection(db, 'wishlists'),
-          where('userId', '==', currentUser.uid)
-        );
-        const snapshot = await getDocs(q);
-        const items = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          addedAt: doc.data().addedAt?.toDate() || new Date()
+        const { data, error } = await getSupabaseBrowserClient()
+          .from('wishlists')
+          .select('*')
+          .eq('user_id', currentUser.uid)
+          .order('added_at', { ascending: false });
+        if (error) throw error;
+
+        const items = (data || []).map((row) => ({
+          id: row.id,
+          productId: row.product_id,
+          name: row.name || '',
+          price: Number(row.price || 0),
+          originalPrice:
+            row.original_price == null ? undefined : Number(row.original_price),
+          image: resolveStorageImage(row.image_path || row.image_url || ''),
+          brand: row.brand || '',
+          category: row.category || undefined,
+          sellerId: row.seller_user_id || undefined,
+          sellerName: row.seller_name || undefined,
+          addedAt: row.added_at ? new Date(row.added_at) : new Date(),
         })) as WishlistItem[];
         
         // Sort by addedAt in descending order (newest first)
@@ -107,16 +118,35 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
         return;
       }
 
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
       const wishlistData = {
-        ...product,
-        userId: currentUser.uid,
-        addedAt: new Date()
+        id,
+        user_id: currentUser.uid,
+        product_id: product.productId,
+        seller_user_id: product.sellerId || null,
+        seller_name: product.sellerName || null,
+        name: product.name,
+        brand: product.brand,
+        category: product.category || null,
+        image_url: product.image,
+        price: product.price,
+        original_price: product.originalPrice || null,
+        added_at: now,
+        raw: {
+          ...product,
+          userId: currentUser.uid,
+          addedAt: now,
+        },
       };
 
-      const docRef = await addDoc(collection(db, 'wishlists'), wishlistData);
+      const { error } = await getSupabaseBrowserClient()
+        .from('wishlists')
+        .insert(wishlistData);
+      if (error) throw error;
       
       const newItem: WishlistItem = {
-        id: docRef.id,
+        id,
         ...product,
         addedAt: new Date()
       };
@@ -136,7 +166,11 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
       const item = wishlistItems.find(item => item.productId === productId);
       if (!item) return;
 
-      await deleteDoc(doc(db, 'wishlists', item.id));
+      const { error } = await getSupabaseBrowserClient()
+        .from('wishlists')
+        .delete()
+        .eq('id', item.id);
+      if (error) throw error;
       setWishlistItems(prev => prev.filter(item => item.productId !== productId));
     } catch (error) {
       console.error('Error removing from wishlist:', error);

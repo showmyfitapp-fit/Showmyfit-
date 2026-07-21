@@ -11,8 +11,12 @@ import {
 import { useCart } from '@/contexts/CartContext';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import {
+  getProductByIdOrSlug,
+  getProducts,
+  getSellerProfiles,
+} from '@/lib/supabase/products';
 import FastImage from '@/components/common/FastImage';
 import ShareButton from '@/components/common/ShareButton';
 import ProductSEO from '@/components/seo/ProductSEO';
@@ -119,16 +123,25 @@ const ProductDetailPage: React.FC = () => {
 
     setLoadingReviews(true);
     try {
-      const reviewsQuery = query(
-        collection(db, 'reviews'),
-        where('productId', '==', product.id)
-      );
-      const reviewsSnapshot = await getDocs(reviewsQuery);
+      const { data, error } = await getSupabaseBrowserClient()
+        .from('reviews')
+        .select('*')
+        .eq('product_id', product.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
 
-      const reviewsData = reviewsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().createdAt?.toDate() || new Date()
+      const reviewsData = (data || []).map((review) => ({
+        ...(review.raw || {}),
+        id: review.id,
+        productId: review.product_id,
+        userId: review.user_id,
+        userName: review.user_name,
+        comment: review.comment,
+        reviewText: review.review_text,
+        rating: review.rating,
+        verified: review.verified,
+        createdAt: review.created_at,
+        date: review.created_at ? new Date(review.created_at) : new Date(),
       })) as any[];
 
       setReviews(reviewsData);
@@ -165,18 +178,36 @@ const ProductDetailPage: React.FC = () => {
 
     setSubmittingReview(true);
     try {
+      if (!currentUser) {
+        throw new Error('Please sign in to submit a review.');
+      }
+
       const reviewData = {
-        productId: product.id,
-        userId: currentUser?.uid || 'anonymous',
-        userName: reviewForm.userName || 'Anonymous',
+        id: crypto.randomUUID(),
+        product_id: product.id,
+        user_id: currentUser.uid,
+        user_name: reviewForm.userName || currentUser.displayName || 'Anonymous',
         rating: reviewForm.rating,
         comment: reviewForm.comment.trim(),
-        reviewText: reviewForm.comment.trim(),
+        review_text: reviewForm.comment.trim(),
         verified: false,
-        createdAt: new Date()
+        created_at: new Date().toISOString(),
+        raw: {
+          productId: product.id,
+          userId: currentUser.uid,
+          userName: reviewForm.userName || currentUser.displayName || 'Anonymous',
+          rating: reviewForm.rating,
+          comment: reviewForm.comment.trim(),
+          reviewText: reviewForm.comment.trim(),
+          verified: false,
+          createdAt: new Date().toISOString(),
+        },
       };
 
-      await addDoc(collection(db, 'reviews'), reviewData);
+      const { error } = await getSupabaseBrowserClient()
+        .from('reviews')
+        .insert(reviewData);
+      if (error) throw error;
 
       // Reset form and close modal
       setReviewForm({ rating: 5, comment: '', userName: '' });
@@ -202,7 +233,11 @@ const ProductDetailPage: React.FC = () => {
     }
 
     try {
-      await deleteDoc(doc(db, 'reviews', reviewId));
+      const { error } = await getSupabaseBrowserClient()
+        .from('reviews')
+        .delete()
+        .eq('id', reviewId);
+      if (error) throw error;
       await fetchReviews();
     } catch (error) {
       console.error('Error deleting review:', error);
@@ -215,13 +250,8 @@ const ProductDetailPage: React.FC = () => {
     const fetchSimilar = async () => {
       if (!product || !product.category) return;
       try {
-        const q = query(
-          collection(db, 'products'),
-          where('category', '==', product.category)
-        );
-        const snap = await getDocs(q);
-        const items = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as any))
+        const items = (await getProducts())
+          .filter((candidate) => candidate.category === product.category)
           .filter((p: any) => p.id !== product.id)
           .slice(0, 12) as Product[];
         setSimilarProducts(items);
@@ -246,40 +276,21 @@ const ProductDetailPage: React.FC = () => {
       console.log('ProductDetailPage: Fetching product:', identifier);
       setLoading(true);
       try {
-        const productDoc = await getDoc(doc(db, 'products', identifier));
-        let resolvedDoc = productDoc;
+        const productInfo = (await getProductByIdOrSlug(identifier)) as Product | null;
 
-        if (!productDoc.exists()) {
-          const slugQuery = query(
-            collection(db, 'products'),
-            where('slug', '==', identifier)
-          );
-          const slugSnapshot = await getDocs(slugQuery);
-          if (!slugSnapshot.empty) {
-            resolvedDoc = slugSnapshot.docs[0];
-          }
-        }
-
-        if (resolvedDoc.exists()) {
-          console.log('ProductDetailPage: Product found in Firestore');
-          const productData = resolvedDoc.data();
-
-          const productInfo = {
-            id: resolvedDoc.id,
-            ...productData,
-            createdAt: productData.createdAt?.toDate() || new Date(),
-            updatedAt: productData.updatedAt?.toDate() || new Date()
-          } as Product;
+        if (productInfo) {
+          console.log('ProductDetailPage: Product found in Supabase');
 
           setProduct(productInfo);
 
           // Fetch seller data
           if (productInfo.sellerId) {
-            const sellerDoc = await getDoc(doc(db, 'users', productInfo.sellerId));
-            if (sellerDoc.exists()) {
-              const sellerData = sellerDoc.data();
+            const sellerData = (await getSellerProfiles()).find(
+              (candidate) => candidate.id === productInfo.sellerId
+            );
+            if (sellerData) {
               setSeller({
-                id: sellerDoc.id,
+                id: sellerData.id,
                 name: sellerData.displayName || sellerData.name || 'Unknown',
                 email: sellerData.email || '',
                 phone: sellerData.phone || '',
@@ -293,7 +304,7 @@ const ProductDetailPage: React.FC = () => {
                   totalOrders: sellerData.stats?.totalOrders || 0,
                   rating: sellerData.stats?.rating || 0
                 },
-                createdAt: sellerData.createdAt?.toDate() || new Date()
+                createdAt: sellerData.createdAt || new Date()
               });
             }
           }

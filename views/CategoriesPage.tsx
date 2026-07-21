@@ -10,8 +10,7 @@ import {
 } from 'lucide-react';
 import ReserveButton from '../components/common/ReserveButton';
 import OptimizedImage from '../components/common/OptimizedImage';
-import { collection, query, getDocs, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { getProducts, getSellerProfiles } from '@/lib/supabase/products';
 import { useCart } from '../contexts/CartContext';
 import { useSEO, SEOConfigs } from '../hooks/useSEO';
 import { useCategories } from '../hooks/useCategories';
@@ -141,29 +140,13 @@ const CategoriesPage: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch all products
-        const productsQuery = query(
-          collection(db, 'products'),
-          where('status', '==', 'active')
-        );
-        const productsSnapshot = await getDocs(productsQuery);
-        const productsData = productsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-          updatedAt: doc.data().updatedAt?.toDate() || new Date()
-        })) as Product[];
+        const productsData = (await getProducts()).filter(
+          (product) => product.status === 'active'
+        ) as Product[];
 
-        // Fetch all sellers
-        const sellersQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'shop')
-        );
-        const sellersSnapshot = await getDocs(sellersQuery);
-        const sellersData = sellersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          stats: doc.data().stats || {
+        const sellersData = (await getSellerProfiles()).map((seller) => ({
+          ...seller,
+          stats: seller.stats || {
             totalProducts: 0,
             totalSales: 0,
             totalOrders: 0,

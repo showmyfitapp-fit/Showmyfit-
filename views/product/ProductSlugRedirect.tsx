@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, query, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 import { getProductPath } from '@/utils/productUrls';
+import { getProducts } from '@/lib/supabase/products';
 
 const ProductSlugRedirect: React.FC = () => {
   const params = useParams();
@@ -43,7 +42,7 @@ const ProductSlugRedirect: React.FC = () => {
 
         if (productId) {
           console.log('✅ Found product ID in URL:', productId);
-          router.push(getProductPath({ id: productId }), { replace: true });
+          router.replace(getProductPath({ id: productId }));
           return;
         }
 
@@ -53,17 +52,14 @@ const ProductSlugRedirect: React.FC = () => {
         console.log('🔍 Searching for product with slug:', slugStr);
         console.log('🔍 Search term:', searchTerm);
 
-        // Fetch all products
-        const productsQuery = query(collection(db, 'products'));
-        const snapshot = await getDocs(productsQuery);
+        const products = await getProducts();
 
         // Find matching product by name
         let matchedProduct: any = null;
         let bestMatch: any = null;
         let bestMatchScore = 0;
 
-        snapshot.docs.forEach((doc) => {
-          const productData = doc.data();
+        products.forEach((productData) => {
 
           // Only check active products
           if (productData.status !== 'active') return;
@@ -78,9 +74,9 @@ const ProductSlugRedirect: React.FC = () => {
           const slugLower = slugStr.toLowerCase();
 
           // Exact slug match (highest priority)
-          if (productSlug === slugLower || doc.id === slugStr) {
+          if (productSlug === slugLower || productData.id === slugStr) {
             matchedProduct = {
-              id: doc.id,
+              id: productData.id,
               ...productData
             };
             return; // Found exact match, stop searching
@@ -108,7 +104,7 @@ const ProductSlugRedirect: React.FC = () => {
           if (matchScore > bestMatchScore) {
             bestMatchScore = matchScore;
             bestMatch = {
-              id: doc.id,
+              id: productData.id,
               ...productData
             };
           }
@@ -121,7 +117,7 @@ const ProductSlugRedirect: React.FC = () => {
 
         if (matchedProduct) {
           console.log('✅ Found product:', matchedProduct.id, matchedProduct.name);
-          router.push(getProductPath(matchedProduct), { replace: true });
+          router.replace(getProductPath(matchedProduct));
         } else {
           console.log('❌ Product not found for slug:', slugStr);
           setError(true);

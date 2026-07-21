@@ -16,8 +16,11 @@ import ProductCard from '../components/product/ProductCard';
 import StoryCard from '../components/common/StoryCard';
 import OptimizedImage from '../components/common/OptimizedImage';
 // import Chatbot from '../components/common/Chatbot';
-import { collection, query, getDocs, where, orderBy } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import {
+  getHomePageSections,
+  getProducts,
+  getSellerProfiles,
+} from '@/lib/supabase/products';
 import Footer from '../components/layout/Footer';
 import { useWishlist } from '../contexts/WishlistContext';
 import { useSEO, SEOConfigs } from '../hooks/useSEO';
@@ -111,33 +114,10 @@ const HomePage: React.FC = () => {
     const fetchHomePageData = async () => {
       setLoadingSections(true);
       try {
-        // Load home page sections
-        const sectionsQuery = query(
-          collection(db, 'homePageSections'),
-          where('isActive', '==', true),
-          orderBy('displayOrder', 'asc')
-        );
-        const sectionsSnapshot = await getDocs(sectionsQuery);
-        const sectionsData = sectionsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const sectionsData = await getHomePageSections();
         setHomePageSections(sectionsData);
 
-        // Load all products
-        const productsQuery = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-        const productsSnapshot = await getDocs(productsQuery);
-        const productsData = productsSnapshot.docs.map(doc => {
-          const data = doc.data();
-          // Handle both image and imageUrl fields
-          const imageSrc = data.image || data.imageUrl || '';
-
-          return {
-            id: doc.id,
-            ...data,
-            image: imageSrc // Standardize on 'image'
-          };
-        });
+        const productsData = await getProducts();
         setAllProducts(productsData);
 
         // Preload product images for better performance
@@ -173,39 +153,7 @@ const HomePage: React.FC = () => {
     const fetchSellers = async () => {
       // setLoadingSellers(true);
       try {
-        // Query users collection for approved sellers (shop role with approved status)
-        const usersQuery = query(
-          collection(db, 'users'),
-          where('role', '==', 'shop')
-        );
-        const snapshot = await getDocs(usersQuery);
-
-        const sellersList: any[] = [];
-        snapshot.docs.forEach((doc) => {
-          const userData = doc.data();
-
-          // Only include users who are approved sellers
-          if (userData.role === 'shop' && userData.sellerApplication?.status === 'approved') {
-            sellersList.push({
-              id: doc.id,
-              userId: doc.id,
-              name: userData.displayName || userData.name || 'Unknown Seller',
-              email: userData.email || 'No email',
-              phone: userData.phone || 'No phone',
-              businessName: userData.businessName || 'No business name',
-              businessType: userData.businessType || 'No type',
-              address: userData.address || userData.businessAddress || 'No address',
-              location: userData.location || null, // Real location data
-              stats: userData.stats || {
-                totalProducts: Math.floor(Math.random() * 50) + 10,
-                totalSales: Math.floor(Math.random() * 1000) + 100,
-                totalOrders: Math.floor(Math.random() * 200) + 20,
-                rating: Math.random() * 2 + 3 // Random rating between 3-5
-              },
-              createdAt: userData.createdAt || new Date()
-            });
-          }
-        });
+        const sellersList = await getSellerProfiles();
 
         // If no sellers found, show empty state
         if (sellersList.length === 0) {

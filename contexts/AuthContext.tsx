@@ -1,14 +1,46 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase/config';
-import { getUserData, UserData } from '../firebase/auth';
+'use client';
+
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import {
+  getUserData,
+  resetPassword as resetSupabasePassword,
+  signIn as supabaseSignIn,
+  signInWithFacebook,
+  signInWithGoogle,
+  signOutUser,
+  signUp as supabaseSignUp,
+  toAppUser,
+  type AppUser,
+  type UserData,
+} from '@/firebase/auth';
 
 interface AuthContextType {
-  currentUser: User | null;
+  currentUser: AppUser | null;
   userData: UserData | null;
   loading: boolean;
-  signUp: (email: string, password: string, displayName: string, role?: 'user' | 'shop' | 'admin', phone?: string, address?: string) => Promise<any>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+    role?: 'user' | 'shop' | 'admin',
+    phone?: string,
+    address?: string
+  ) => Promise<any>;
   signIn: (email: string, password: string) => Promise<any>;
+  login: (email: string, password: string) => Promise<any>;
+  signup: (
+    email: string,
+    password: string,
+    displayName: string
+  ) => Promise<any>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   refreshUserData: () => Promise<void>;
@@ -20,88 +52,88 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    console.log('🔐 AuthProvider: Setting up auth state listener');
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('🔐 AuthProvider: Auth state changed, user:', user ? user.uid : 'null');
-      setCurrentUser(user);
-
-      if (user) {
-        try {
-          console.log('🔐 AuthProvider: Fetching user data for:', user.uid);
-          const userData = await getUserData(user.uid, user.email || undefined);
-          setUserData(userData);
-          console.log('🔐 AuthProvider: User data loaded:', userData);
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          setUserData(null);
-        }
-      } else {
-        setUserData(null);
-      }
-
-      console.log('🔐 AuthProvider: Setting loading to false');
+  const loadUser = useCallback(async (authUser: any | null) => {
+    if (!authUser) {
+      setCurrentUser(null);
+      setUserData(null);
       setLoading(false);
-    });
+      return;
+    }
 
-    return unsubscribe;
+    try {
+      const profile = await getUserData(authUser.id, authUser.email || undefined);
+      setUserData(profile);
+      setCurrentUser(toAppUser(authUser, profile));
+    } catch (error) {
+      console.error('Failed to load Supabase profile:', error);
+      setUserData(null);
+      setCurrentUser(toAppUser(authUser));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const signUp = async (email: string, password: string, displayName: string, role: 'user' | 'shop' | 'admin' = 'user', phone?: string, address?: string) => {
-    const { signUp: firebaseSignUp } = await import('../firebase/auth');
-    return firebaseSignUp(email, password, displayName, role, phone, address);
-  };
+  useEffect(() => {
+    const client = getSupabaseBrowserClient();
+    let active = true;
 
-  const signIn = async (email: string, password: string) => {
-    const { signIn: firebaseSignIn } = await import('../firebase/auth');
-    return firebaseSignIn(email, password);
-  };
+    client.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) console.error('Failed to restore Supabase session:', error);
+      void loadUser(data.session?.user || null);
+    });
 
-  const signOut = async () => {
-    const { signOutUser } = await import('../firebase/auth');
-    return signOutUser();
-  };
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      // Defer profile queries until the auth callback releases its internal lock.
+      setTimeout(() => {
+        if (active) void loadUser(session?.user || null);
+      }, 0);
+    });
 
-  const resetPassword = async (email: string) => {
-    const { resetPassword: firebaseResetPassword } = await import('../firebase/auth');
-    return firebaseResetPassword(email);
-  };
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [loadUser]);
+
+  const signUp = async (
+    email: string,
+    password: string,
+    displayName: string,
+    role: 'user' | 'shop' | 'admin' = 'user',
+    phone?: string,
+    address?: string
+  ) => supabaseSignUp(email, password, displayName, role, phone, address);
+
+  const signIn = async (email: string, password: string) =>
+    supabaseSignIn(email, password);
+
+  const signOut = async () => signOutUser();
 
   const refreshUserData = async () => {
-    if (currentUser) {
-      try {
-        console.log('Refreshing user data for:', currentUser.uid);
-        const userData = await getUserData(currentUser.uid, currentUser.email || undefined);
-        console.log('Refreshed user data:', userData);
-        setUserData(userData);
-      } catch (error) {
-        console.error('Error refreshing user data:', error);
-      }
-    }
+    const {
+      data: { user },
+    } = await getSupabaseBrowserClient().auth.getUser();
+    await loadUser(user);
   };
 
   const loginWithGoogle = async () => {
-    const { signInWithGoogle } = await import('../firebase/auth');
     await signInWithGoogle();
   };
 
   const loginWithFacebook = async () => {
-    const { signInWithFacebook } = await import('../firebase/auth');
     await signInWithFacebook();
   };
 
@@ -111,16 +143,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     signUp,
     signIn,
+    login: signIn,
+    signup: (email, password, displayName) =>
+      signUp(email, password, displayName),
     signOut,
-    resetPassword,
+    resetPassword: resetSupabasePassword,
     refreshUserData,
     loginWithGoogle,
-    loginWithFacebook
+    loginWithFacebook,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
