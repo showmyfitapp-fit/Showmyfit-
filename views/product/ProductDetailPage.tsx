@@ -618,7 +618,7 @@ const ProductDetailPage: React.FC = () => {
 
           {/* Action Buttons */}
           {/* Action Buttons */}
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 lg:static lg:p-0 lg:border-0 lg:bg-transparent z-40 flex flex-col gap-3">
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 lg:static lg:p-0 lg:border-0 lg:bg-transparent z-50 flex flex-col gap-3">
             {getProductQuantity() > 0 ? (
               <>
                 <div className="w-full bg-[#0f0f0f] text-white rounded-full h-14 px-6 flex items-center justify-between shadow-xl">

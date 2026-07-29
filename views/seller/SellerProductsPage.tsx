@@ -477,10 +477,12 @@ const SellerProductsPage: React.FC = () => {
                         }}
                         disabled={product.stock <= 0}
                         className={`
-                          opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0
+                          transition-all duration-300
                           bg-black text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 hover:scale-105 active:scale-95
                           flex items-center gap-1
-                          ${product.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}
+                          ${product.stock <= 0
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 translate-y-0 md:translate-y-2 md:group-hover:translate-y-0'}
                         `}
                       >
                         Buy Now

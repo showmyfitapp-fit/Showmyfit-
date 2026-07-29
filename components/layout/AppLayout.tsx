@@ -107,14 +107,16 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isProductDetailPage = pathname?.startsWith('/p/') || pathname?.startsWith('/product/');
   const isSellerStorePage = pathname?.startsWith('/seller/');
   const hideTopNavbar = isSellerStorePage;
+  // Product detail has its own fixed Buy Now bar — hide bottom nav so it isn't covered
+  const hideBottomNav = isProductDetailPage;
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] font-sans">
       {!hideTopNavbar && <Navbar userRole="user" />}
-      <div className={`${!hideTopNavbar ? 'pt-0' : 'pt-0'} pb-20 md:pb-4`}>
+      <div className={`pt-0 ${hideBottomNav ? 'pb-0 md:pb-4' : 'pb-20 md:pb-4'}`}>
         {children}
       </div>
-      <BottomNavigation />
+      {!hideBottomNav && <BottomNavigation />}
     </div>
   );
 };
