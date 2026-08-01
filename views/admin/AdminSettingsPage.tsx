@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, doc, updateDoc, addDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, query } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import {
   Settings,
@@ -49,7 +49,7 @@ interface AdminSettings {
 
 const AdminSettingsPage: React.FC = () => {
   const router = useRouter();
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState<AdminSettings>({
     siteName: 'Showmyfit',
     siteDescription: 'Your trusted e-commerce platform',
@@ -75,9 +75,97 @@ const AdminSettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const isAdmin = Boolean(currentUser && userData?.role === 'admin');
 
-  // Check if user is admin
-  if (!currentUser || userData?.role !== 'admin') {
+  useEffect(() => {
+    if (authLoading || !isAdmin) {
+      return;
+    }
+
+    const loadSettings = async () => {
+      setLoading(true);
+      try {
+        console.log('Loading admin settings...');
+
+        const settingsQuery = query(collection(db, 'adminSettings'));
+        const snapshot = await getDocs(settingsQuery);
+
+        console.log('Settings query result:', {
+          docsCount: snapshot.docs.length,
+          empty: snapshot.empty
+        });
+
+        if (snapshot.empty) {
+          console.log('No settings found, creating default settings');
+          const defaultSettings = {
+            siteName: 'Showmyfit',
+            siteDescription: 'Your trusted e-commerce platform',
+            contactEmail: 'admin@showmyfit.com',
+            contactPhone: '+91 9876543210',
+            address: '123 Business Street, City, State 12345',
+            currency: 'INR',
+            timezone: 'Asia/Kolkata',
+            maintenanceMode: false,
+            registrationEnabled: true,
+            sellerRegistrationEnabled: true,
+            emailNotifications: true,
+            smsNotifications: false,
+            autoApproveSellers: false,
+            maxProductsPerSeller: 1000,
+            commissionRate: 5,
+            shippingCost: 50,
+            freeShippingThreshold: 500,
+            taxRate: 18,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          const docRef = await addDoc(collection(db, 'adminSettings'), defaultSettings);
+          console.log('Default settings created with ID:', docRef.id);
+          setSettings({
+            ...defaultSettings,
+            id: docRef.id
+          });
+        } else {
+          const settingsData = snapshot.docs[0].data() as AdminSettings;
+          console.log('Settings loaded:', {
+            id: snapshot.docs[0].id,
+            data: settingsData
+          });
+          setSettings({
+            ...settingsData,
+            id: snapshot.docs[0].id
+          });
+        }
+      } catch (error: any) {
+        console.error('Error loading settings:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message
+        });
+        setMessage(`Error loading settings: ${error.message}`);
+        setIsSuccess(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, [authLoading, isAdmin]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
         <Navbar />
@@ -94,62 +182,6 @@ const AdminSettingsPage: React.FC = () => {
       </div>
     );
   }
-
-  // Load settings
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      console.log('Loading admin settings...');
-
-      const settingsQuery = query(collection(db, 'adminSettings'));
-      const snapshot = await getDocs(settingsQuery);
-
-      console.log('Settings query result:', {
-        docsCount: snapshot.docs.length,
-        empty: snapshot.empty
-      });
-
-      if (snapshot.empty) {
-        console.log('No settings found, creating default settings');
-        // Create default settings if none exist
-        const defaultSettings = {
-          ...settings,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-        const docRef = await addDoc(collection(db, 'adminSettings'), defaultSettings);
-        console.log('Default settings created with ID:', docRef.id);
-        setSettings({
-          ...defaultSettings,
-          id: docRef.id
-        });
-      } else {
-        const settingsData = snapshot.docs[0].data() as AdminSettings;
-        console.log('Settings loaded:', {
-          id: snapshot.docs[0].id,
-          data: settingsData
-        });
-        setSettings({
-          ...settingsData,
-          id: snapshot.docs[0].id
-        });
-      }
-    } catch (error: any) {
-      console.error('Error loading settings:', error);
-      console.error('Error details:', {
-        code: error.code,
-        message: error.message
-      });
-      setMessage(`Error loading settings: ${error.message}`);
-      setIsSuccess(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
 
   // Save settings
   const saveSettings = async () => {

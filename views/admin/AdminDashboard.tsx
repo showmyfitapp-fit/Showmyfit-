@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   Users,
   Store,
@@ -23,7 +22,6 @@ import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/firebase/config';
-import AdminReservedProducts from '@/components/admin/AdminReservedProducts';
 
 interface DashboardStats {
   totalUsers: number;
@@ -37,7 +35,7 @@ interface DashboardStats {
 }
 
 const AdminDashboard: React.FC = () => {
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     totalSellers: 0,
@@ -49,9 +47,82 @@ const AdminDashboard: React.FC = () => {
     activeUsers: 0
   });
   const [loading, setLoading] = useState(true);
+  const isAdmin = Boolean(currentUser && userData?.role === 'admin');
 
-  // Check if user is admin
-  if (!currentUser || userData?.role !== 'admin') {
+  useEffect(() => {
+    if (authLoading || !isAdmin) {
+      return;
+    }
+
+    const loadStats = async () => {
+      setLoading(true);
+      try {
+        const usersQuery = query(collection(db, 'users'));
+        const usersSnapshot = await getDocs(usersQuery);
+        const totalUsers = usersSnapshot.docs.length;
+        const activeUsers = usersSnapshot.docs.filter(doc => doc.data().status === 'active').length;
+
+        const sellersQuery = query(collection(db, 'users'), where('role', '==', 'shop'));
+        const sellersSnapshot = await getDocs(sellersQuery);
+        const totalSellers = sellersSnapshot.docs.length;
+        const pendingSellers = sellersSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
+
+        const productsQuery = query(collection(db, 'products'));
+        const productsSnapshot = await getDocs(productsQuery);
+        const totalProducts = productsSnapshot.docs.length;
+
+        const ordersQuery = query(collection(db, 'orders'));
+        const ordersSnapshot = await getDocs(ordersQuery);
+        const totalOrders = ordersSnapshot.docs.length;
+        const recentOrders = ordersSnapshot.docs.filter(doc => {
+          const orderDate = doc.data().createdAt?.toDate();
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          return orderDate && orderDate > weekAgo;
+        }).length;
+
+        let totalRevenue = 0;
+        ordersSnapshot.docs.forEach(doc => {
+          const orderData = doc.data();
+          if (orderData.status === 'delivered' && orderData.total) {
+            totalRevenue += orderData.total;
+          }
+        });
+
+        setStats({
+          totalUsers,
+          totalSellers,
+          totalProducts,
+          totalOrders,
+          pendingSellers,
+          recentOrders,
+          totalRevenue,
+          activeUsers
+        });
+      } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, [authLoading, isAdmin]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
         <Navbar />
@@ -68,68 +139,6 @@ const AdminDashboard: React.FC = () => {
       </div>
     );
   }
-
-  // Load dashboard stats
-  const loadStats = async () => {
-    setLoading(true);
-    try {
-      // Load users
-      const usersQuery = query(collection(db, 'users'));
-      const usersSnapshot = await getDocs(usersQuery);
-      const totalUsers = usersSnapshot.docs.length;
-      const activeUsers = usersSnapshot.docs.filter(doc => doc.data().status === 'active').length;
-
-      // Load sellers
-      const sellersQuery = query(collection(db, 'users'), where('role', '==', 'shop'));
-      const sellersSnapshot = await getDocs(sellersQuery);
-      const totalSellers = sellersSnapshot.docs.length;
-      const pendingSellers = sellersSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
-
-      // Load products
-      const productsQuery = query(collection(db, 'products'));
-      const productsSnapshot = await getDocs(productsQuery);
-      const totalProducts = productsSnapshot.docs.length;
-
-      // Load orders
-      const ordersQuery = query(collection(db, 'orders'));
-      const ordersSnapshot = await getDocs(ordersQuery);
-      const totalOrders = ordersSnapshot.docs.length;
-      const recentOrders = ordersSnapshot.docs.filter(doc => {
-        const orderDate = doc.data().createdAt?.toDate();
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return orderDate && orderDate > weekAgo;
-      }).length;
-
-      // Calculate total revenue
-      let totalRevenue = 0;
-      ordersSnapshot.docs.forEach(doc => {
-        const orderData = doc.data();
-        if (orderData.status === 'delivered' && orderData.total) {
-          totalRevenue += orderData.total;
-        }
-      });
-
-      setStats({
-        totalUsers,
-        totalSellers,
-        totalProducts,
-        totalOrders,
-        pendingSellers,
-        recentOrders,
-        totalRevenue,
-        activeUsers
-      });
-    } catch (error) {
-      console.error('Error loading dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadStats();
-  }, []);
 
   const adminTools = [
     {
@@ -300,8 +309,8 @@ const AdminDashboard: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Admin Tools</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {adminTools.map((tool, index) => (
-              <Link href={tool.link} className="group">
+            {adminTools.map((tool) => (
+              <Link key={tool.link} href={tool.link} className="group">
                 <div className="bg-gray-50 rounded-xl p-6 hover:bg-gray-100 transition-colors group-hover:shadow-lg">
                   <div className="flex items-center justify-between mb-4">
                     <div className={`w-12 h-12 ${tool.color} rounded-lg flex items-center justify-center`}>

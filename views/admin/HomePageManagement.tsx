@@ -55,7 +55,7 @@ interface Product {
 
 const HomePageManagement: React.FC = () => {
   const router = useRouter();
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, loading: authLoading } = useAuth();
   const [sections, setSections] = useState<HomePageSection[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,6 +69,7 @@ const HomePageManagement: React.FC = () => {
     fashion: '',
     home: ''
   });
+  const isAdmin = Boolean(currentUser && userData?.role === 'admin');
 
   const [formData, setFormData] = useState<HomePageSection>({
     type: 'featured',
@@ -115,24 +116,6 @@ const HomePageManagement: React.FC = () => {
     }
   ];
 
-  // Check if user is admin
-  if (!currentUser || userData?.role !== 'admin') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-            <p className="text-gray-600 mb-6">You need admin access to manage home page sections.</p>
-            <Button onClick={() => router.push('/profile')} variant="primary" size="lg">
-              Go to Profile
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Load sections and products
   const loadData = async () => {
     setLoading(true);
@@ -167,11 +150,6 @@ const HomePageManagement: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    loadData();
-    loadPromotionalSettings();
-  }, []);
-
   // Load promotional card settings
   const loadPromotionalSettings = async () => {
     try {
@@ -188,6 +166,44 @@ const HomePageManagement: React.FC = () => {
       console.log('Promotional settings not found, using defaults');
     }
   };
+
+  useEffect(() => {
+    if (authLoading || !isAdmin) {
+      return;
+    }
+    loadData();
+    loadPromotionalSettings();
+  }, [authLoading, isAdmin]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+            <p className="text-gray-600 mb-6">You need admin access to manage home page sections.</p>
+            <Button onClick={() => router.push('/profile')} variant="primary" size="lg">
+              Go to Profile
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
