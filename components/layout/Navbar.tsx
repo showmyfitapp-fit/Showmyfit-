@@ -120,6 +120,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
   // Safe context access with fallbacks
   let currentUser = null;
   let loading = false;
+  let resolvedRole: 'user' | 'shop' | 'admin' = userRole;
   let getCartItemCount = () => 0;
   let showAddNotification = false;
   let getWishlistCount = () => 0;
@@ -128,6 +129,9 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
     const auth = useAuth();
     currentUser = auth.currentUser;
     loading = auth.loading;
+    if (auth.userData?.role) {
+      resolvedRole = auth.userData.role;
+    }
   } catch (error) {
     console.warn('🔐 Navbar: Auth context not available:', error);
   }
@@ -339,7 +343,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        userRole={userRole}
+        userRole={resolvedRole}
       />
     </>
   );

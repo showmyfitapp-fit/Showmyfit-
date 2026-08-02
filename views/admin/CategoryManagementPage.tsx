@@ -16,7 +16,6 @@ import {
   BarChart3,
   Database,
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -75,7 +74,6 @@ const CategoryManagementPage: React.FC = () => {
   if (!currentUser || userData?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-24 text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
@@ -176,7 +174,6 @@ const CategoryManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>

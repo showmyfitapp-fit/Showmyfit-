@@ -43,12 +43,15 @@ ChartJS.register(
 );
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { updateUserData } from '@/firebase/auth';
+import {
+  getAdminDashboardData,
+  orderCreatedAt,
+  orderTotal,
+} from '@/lib/supabase/admin';
 
 interface AdminProfilePageProps {
   currentUser: any;
@@ -124,26 +127,18 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
     try {
       setStats(prev => ({ ...prev, loading: true }));
 
-      // Fetch total users
-      const usersQuery = query(collection(db, 'users'));
-      const usersSnapshot = await getDocs(usersQuery);
-      const totalUsers = usersSnapshot.size;
+      const {
+        profiles,
+        sellers,
+        products,
+        pendingApprovals: pendingApprovalsData,
+        orders,
+      } = await getAdminDashboardData();
 
-      // Fetch active sellers
-      const sellersQuery = query(
-        collection(db, 'users'),
-        where('role', '==', 'shop'),
-        where('sellerApplication.status', '==', 'approved')
-      );
-      const sellersSnapshot = await getDocs(sellersQuery);
-      const activeSellers = sellersSnapshot.size;
-
-      // Fetch orders and calculate revenue
-      const ordersQuery = query(collection(db, 'orders'));
-      const ordersSnapshot = await getDocs(ordersQuery);
-      const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const totalUsers = profiles.length;
+      const activeSellers = sellers.length;
       const totalOrders = orders.length;
-      const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+      const totalRevenue = orders.reduce((sum, order) => sum + orderTotal(order), 0);
 
       // Calculate user growth (last 30 days vs previous 30 days)
       const thirtyDaysAgo = new Date();
@@ -151,22 +146,22 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       const sixtyDaysAgo = new Date();
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-      const recentUsers = usersSnapshot.docs.filter(doc => {
-        const createdAt = doc.data().createdAt?.toDate();
-        return createdAt && createdAt >= thirtyDaysAgo;
+      const recentUsers = profiles.filter((profile) => {
+        const createdAt = profile.createdAt instanceof Date
+          ? profile.createdAt
+          : new Date(profile.createdAt);
+        return createdAt >= thirtyDaysAgo;
       }).length;
 
-      const previousUsers = usersSnapshot.docs.filter(doc => {
-        const createdAt = doc.data().createdAt?.toDate();
-        return createdAt && createdAt >= sixtyDaysAgo && createdAt < thirtyDaysAgo;
+      const previousUsers = profiles.filter((profile) => {
+        const createdAt = profile.createdAt instanceof Date
+          ? profile.createdAt
+          : new Date(profile.createdAt);
+        return createdAt >= sixtyDaysAgo && createdAt < thirtyDaysAgo;
       }).length;
 
       const userGrowth = previousUsers > 0 ? ((recentUsers - previousUsers) / previousUsers) * 100 : 0;
-
-      // Calculate conversion rate (simplified - orders/users)
       const conversionRate = totalUsers > 0 ? (totalOrders / totalUsers) * 100 : 0;
-
-      // Calculate average order value
       const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
       setStats({
@@ -180,46 +175,21 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
         loading: false
       });
 
-      // Fetch pending approvals
-      const pendingSellersQuery = query(
-        collection(db, 'users'),
-        where('role', '==', 'shop'),
-        where('sellerApplication.status', '==', 'pending')
-      );
-      const pendingSellersSnapshot = await getDocs(pendingSellersQuery);
-      const pendingApprovalsData = pendingSellersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        type: 'Seller Registration',
-        name: doc.data().businessName || 'Unknown Business',
-        email: doc.data().email,
-        submitted: doc.data().createdAt?.toDate() || new Date()
-      }));
       setPendingApprovals(pendingApprovalsData);
 
-      // Fetch recent activity (simplified - recent orders and user registrations)
-      const recentOrdersQuery = query(
-        collection(db, 'orders'),
-        orderBy('createdAt', 'desc'),
-        limit(5)
-      );
-      const recentOrdersSnapshot = await getDocs(recentOrdersQuery);
-      const recentOrders = recentOrdersSnapshot.docs.map(doc => ({
+      const recentOrders = orders.slice(0, 5).map((order) => ({
         action: 'Order completed',
-        user: `Order #${doc.id.slice(-4)}`,
-        time: doc.data().createdAt?.toDate() || new Date(),
+        user: `Order #${String(order.id).slice(-4)}`,
+        time: orderCreatedAt(order),
         status: 'completed'
       }));
 
-      const recentUsersQuery = query(
-        collection(db, 'users'),
-        orderBy('createdAt', 'desc'),
-        limit(3)
-      );
-      const recentUsersSnapshot = await getDocs(recentUsersQuery);
-      const recentUsersData = recentUsersSnapshot.docs.map(doc => ({
+      const recentUsersData = profiles.slice(0, 3).map((profile) => ({
         action: 'User registered',
-        user: doc.data().email,
-        time: doc.data().createdAt?.toDate() || new Date(),
+        user: profile.email,
+        time: profile.createdAt instanceof Date
+          ? profile.createdAt
+          : new Date(profile.createdAt),
         status: 'completed'
       }));
 
@@ -227,7 +197,6 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
         new Date(b.time).getTime() - new Date(a.time).getTime()
       ).slice(0, 5));
 
-      // System alerts (simplified - based on data)
       const alerts = [];
       if (totalUsers > 1000) {
         alerts.push({
@@ -251,16 +220,10 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
         });
       }
       setSystemAlerts(alerts);
+      setNotificationCount(pendingApprovalsData.length + alerts.length);
 
-      // Calculate notification count
-      const newNotifications = pendingApprovalsData.length + alerts.length;
-      setNotificationCount(newNotifications);
-
-      // Calculate period comparison
-      calculatePeriodComparison(orders, usersSnapshot.docs);
-
-      // Fetch chart data
-      await fetchChartData(orders, usersSnapshot.docs);
+      calculatePeriodComparison(orders, profiles);
+      await fetchChartData(orders, profiles, products);
 
     } catch (error) {
       console.error('Error fetching real-time data:', error);
@@ -269,7 +232,7 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
   };
 
   // Fetch detailed chart data
-  const fetchChartData = async (orders: any[], usersDocs: any[]) => {
+  const fetchChartData = async (orders: any[], profiles: any[], products: any[]) => {
     try {
       // Revenue trends (last 7 days)
       const revenueByDay: { [key: string]: number } = {};
@@ -282,12 +245,10 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       });
 
       orders.forEach(order => {
-        if (order.createdAt) {
-          const orderDate = order.createdAt.toDate();
-          const key = orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          if (revenueByDay.hasOwnProperty(key)) {
-            revenueByDay[key] += order.totalAmount || 0;
-          }
+        const orderDate = orderCreatedAt(order);
+        const key = orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (Object.prototype.hasOwnProperty.call(revenueByDay, key)) {
+          revenueByDay[key] += orderTotal(order);
         }
       });
 
@@ -299,9 +260,6 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
 
       // Sales by category
       const categorySales: { [key: string]: number } = {};
-      const productsQuery = query(collection(db, 'products'));
-      const productsSnapshot = await getDocs(productsQuery);
-      const products = productsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       orders.forEach(order => {
         if (order.items && Array.isArray(order.items)) {
@@ -323,22 +281,20 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       // User growth (last 30 days by week)
       const userGrowthByWeek: { [key: string]: number } = {};
       const last4Weeks = Array.from({ length: 4 }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (28 - i * 7));
-        const weekStart = new Date(date);
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
         const key = `Week ${i + 1}`;
         userGrowthByWeek[key] = 0;
         return { name: key, users: 0 };
       });
 
-      usersDocs.forEach(doc => {
-        const createdAt = doc.data().createdAt?.toDate();
-        if (createdAt) {
+      profiles.forEach(profile => {
+        const createdAt = profile.createdAt instanceof Date
+          ? profile.createdAt
+          : new Date(profile.createdAt);
+        if (!Number.isNaN(createdAt.getTime())) {
           const weekIndex = Math.floor((Date.now() - createdAt.getTime()) / (7 * 24 * 60 * 60 * 1000));
           if (weekIndex >= 0 && weekIndex < 4) {
             const key = `Week ${4 - weekIndex}`;
-            if (userGrowthByWeek.hasOwnProperty(key)) {
+            if (Object.prototype.hasOwnProperty.call(userGrowthByWeek, key)) {
               userGrowthByWeek[key]++;
             }
           }
@@ -362,12 +318,10 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       });
 
       orders.forEach(order => {
-        if (order.createdAt) {
-          const orderDate = order.createdAt.toDate();
-          const key = orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          if (ordersByDay.hasOwnProperty(key)) {
-            ordersByDay[key]++;
-          }
+        const orderDate = orderCreatedAt(order);
+        const key = orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (Object.prototype.hasOwnProperty.call(ordersByDay, key)) {
+          ordersByDay[key]++;
         }
       });
 
@@ -402,7 +356,7 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       const productPerformanceData = Object.values(productSales)
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5)
-        .map((p, i) => ({
+        .map((p) => ({
           name: p.name.length > 15 ? p.name.substring(0, 15) + '...' : p.name,
           sales: p.sales,
           revenue: Math.round(p.revenue)
@@ -420,21 +374,21 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       });
 
       orders.forEach(order => {
-        if (order.createdAt) {
-          const orderDate = order.createdAt.toDate();
-          const key = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-          if (monthlyData.hasOwnProperty(key)) {
-            monthlyData[key].revenue += order.totalAmount || 0;
-            monthlyData[key].orders++;
-          }
+        const orderDate = orderCreatedAt(order);
+        const key = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        if (Object.prototype.hasOwnProperty.call(monthlyData, key)) {
+          monthlyData[key].revenue += orderTotal(order);
+          monthlyData[key].orders++;
         }
       });
 
-      usersDocs.forEach(doc => {
-        const createdAt = doc.data().createdAt?.toDate();
-        if (createdAt) {
+      profiles.forEach(profile => {
+        const createdAt = profile.createdAt instanceof Date
+          ? profile.createdAt
+          : new Date(profile.createdAt);
+        if (!Number.isNaN(createdAt.getTime())) {
           const key = createdAt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-          if (monthlyData.hasOwnProperty(key)) {
+          if (Object.prototype.hasOwnProperty.call(monthlyData, key)) {
             monthlyData[key].users++;
           }
         }
@@ -448,26 +402,19 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       }));
       setMonthlyTrends(monthlyTrendsData);
 
-      // Fetch recent transactions
-      const recentOrdersQuery = query(
-        collection(db, 'orders'),
-        orderBy('createdAt', 'desc'),
-        limit(10)
-      );
-      const recentOrdersSnapshot = await getDocs(recentOrdersQuery);
-      const transactions = recentOrdersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        orderId: doc.id.slice(-8).toUpperCase(),
-        customer: doc.data().userId || 'Unknown',
-        amount: doc.data().totalAmount || 0,
-        status: doc.data().status || 'pending',
-        date: doc.data().createdAt?.toDate() || new Date(),
-        items: doc.data().items?.length || 0
+      const transactions = orders.slice(0, 10).map(order => ({
+        id: order.id,
+        orderId: String(order.id).slice(-8).toUpperCase(),
+        customer: order.userId || order.user_id || 'Unknown',
+        amount: orderTotal(order),
+        status: order.status || 'pending',
+        date: orderCreatedAt(order),
+        items: order.items?.length || 0
       }));
       setRecentTransactions(transactions);
 
       // Calculate additional KPIs
-      const uniqueCustomers = new Set(orders.map((o: any) => o.userId)).size;
+      const uniqueCustomers = new Set(orders.map((o: any) => o.userId || o.user_id)).size;
       const repeatCustomers = orders.length - uniqueCustomers;
       const repeatCustomerRate = orders.length > 0 ? (repeatCustomers / orders.length) * 100 : 0;
 
@@ -488,10 +435,8 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       // Peak hour (simplified - based on order times)
       const hourCounts: { [key: number]: number } = {};
       orders.forEach((order: any) => {
-        if (order.createdAt) {
-          const hour = order.createdAt.toDate().getHours();
-          hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-        }
+        const hour = orderCreatedAt(order).getHours();
+        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
       });
       const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
       const peakHourFormatted = peakHour !== undefined ? `${peakHour}:00` : 'N/A';
@@ -738,7 +683,7 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
   };
 
   // Calculate period comparison (this week vs last week)
-  const calculatePeriodComparison = (orders: any[], usersDocs: any[]) => {
+  const calculatePeriodComparison = (orders: any[], profiles: any[]) => {
     const now = new Date();
     const thisWeekStart = new Date(now);
     thisWeekStart.setDate(now.getDate() - now.getDay());
@@ -747,31 +692,31 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
     const lastWeekStart = new Date(thisWeekStart);
     lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
-    const lastWeekEnd = new Date(thisWeekStart);
-    lastWeekEnd.setMilliseconds(-1);
-
     const thisWeekOrders = orders.filter((o: any) => {
-      const orderDate = o.createdAt?.toDate();
-      return orderDate && orderDate >= thisWeekStart;
+      return orderCreatedAt(o) >= thisWeekStart;
     });
 
     const lastWeekOrders = orders.filter((o: any) => {
-      const orderDate = o.createdAt?.toDate();
-      return orderDate && orderDate >= lastWeekStart && orderDate < thisWeekStart;
+      const orderDate = orderCreatedAt(o);
+      return orderDate >= lastWeekStart && orderDate < thisWeekStart;
     });
 
-    const thisWeekRevenue = thisWeekOrders.reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0);
-    const lastWeekRevenue = lastWeekOrders.reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0);
+    const thisWeekRevenue = thisWeekOrders.reduce((sum: number, o: any) => sum + orderTotal(o), 0);
+    const lastWeekRevenue = lastWeekOrders.reduce((sum: number, o: any) => sum + orderTotal(o), 0);
     const revenueChange = lastWeekRevenue > 0 ? ((thisWeekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100 : 0;
 
-    const thisWeekUsers = usersDocs.filter(doc => {
-      const createdAt = doc.data().createdAt?.toDate();
-      return createdAt && createdAt >= thisWeekStart;
+    const thisWeekUsers = profiles.filter(profile => {
+      const createdAt = profile.createdAt instanceof Date
+        ? profile.createdAt
+        : new Date(profile.createdAt);
+      return createdAt >= thisWeekStart;
     }).length;
 
-    const lastWeekUsers = usersDocs.filter(doc => {
-      const createdAt = doc.data().createdAt?.toDate();
-      return createdAt && createdAt >= lastWeekStart && createdAt < thisWeekStart;
+    const lastWeekUsers = profiles.filter(profile => {
+      const createdAt = profile.createdAt instanceof Date
+        ? profile.createdAt
+        : new Date(profile.createdAt);
+      return createdAt >= lastWeekStart && createdAt < thisWeekStart;
     }).length;
 
     const userChange = lastWeekUsers > 0 ? ((thisWeekUsers - lastWeekUsers) / lastWeekUsers) * 100 : 0;
@@ -880,19 +825,13 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
 
   const handleSave = async () => {
     try {
-      // Update user data in Firestore
-      const { doc, updateDoc } = await import('firebase/firestore');
-      const { db } = await import('../../firebase/config');
-
       if (currentUser?.uid) {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
+        await updateUserData(currentUser.uid, {
           displayName: editData.displayName,
           phone: editData.phone,
           address: editData.address,
-          updatedAt: new Date()
         });
 
-        // Update local state
         if (userData) {
           userData.displayName = editData.displayName;
           userData.phone = editData.phone;
@@ -966,7 +905,15 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
                   <div className="flex items-center justify-center md:justify-start space-x-4 text-sm text-red-100">
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 mr-1" />
-                      <span>Admin since {new Date(currentUser.metadata.creationTime).toLocaleDateString()}</span>
+                      <span>
+                        Admin since{' '}
+                        {new Date(
+                          userData?.createdAt ||
+                            currentUser?.created_at ||
+                            currentUser?.metadata?.creationTime ||
+                            Date.now()
+                        ).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="flex items-center">
                       <Award className="w-4 h-4 mr-1" />

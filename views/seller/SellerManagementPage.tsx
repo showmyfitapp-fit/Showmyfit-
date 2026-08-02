@@ -6,16 +6,19 @@ import {
   Users, CheckCircle, XCircle, AlertCircle, Phone, MapPin,
   TrendingUp, Star, Plus, User, Building, Mail, Calendar, Package, Edit, Trash2, Eye, EyeOff
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import ImageUpload from '@/components/common/ImageUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  collection, query, getDocs, doc, updateDoc, addDoc, writeBatch, where
-} from 'firebase/firestore';
-import { db } from '@/firebase/config';
+  getAdminSellerRecords,
+  getProductsBySeller,
+  saveProduct,
+  updateProductFields,
+  deleteProduct,
+} from '@/lib/supabase/admin';
 import { addSellerEmail } from '@/firebase/sellerSetup';
 import { approveSellerApplication, rejectSellerApplication } from '@/firebase/auth';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface Seller {
   id: string; // Application ID
@@ -67,47 +70,7 @@ const SellerManagementPageMobile: React.FC = () => {
 
     setLoading(true);
     try {
-      console.log('Loading seller applications...');
-
-      // Load from sellerApplications collection instead of users
-      const applicationsQuery = query(collection(db, 'sellerApplications'));
-      const snapshot = await getDocs(applicationsQuery);
-
-      console.log('Executing Firestore query...');
-      console.log('Query successful, found', snapshot.docs.length, 'seller applications');
-
-      const sellersList: Seller[] = [];
-      snapshot.docs.forEach((doc, index) => {
-        const applicationData = doc.data();
-        console.log(`Processing application ${index + 1}:`, {
-          id: doc.id,
-          name: applicationData.name,
-          email: applicationData.email,
-          status: applicationData.status,
-          businessName: applicationData.businessName
-        });
-
-        sellersList.push({
-          id: doc.id, // Application ID
-          userId: applicationData.userId, // User ID for adding products
-          name: applicationData.name || 'Unknown Seller',
-          email: applicationData.email || 'No email',
-          phone: applicationData.phone || 'No phone',
-          businessName: applicationData.businessName || 'No business name',
-          businessType: applicationData.businessType || 'No type',
-          address: applicationData.businessAddress || 'No address',
-          status: applicationData.status || 'pending',
-          stats: applicationData.stats || {
-            totalProducts: 0,
-            totalSales: 0,
-            totalOrders: 0,
-            rating: 0
-          },
-          createdAt: applicationData.submittedAt
-        });
-      });
-
-      console.log('Seller applications loaded successfully:', sellersList.length);
+      const sellersList = (await getAdminSellerRecords()) as Seller[];
       setSellers(sellersList);
     } catch (error: any) {
       console.error('Error loading seller applications:', error);
@@ -125,18 +88,8 @@ const SellerManagementPageMobile: React.FC = () => {
   // Update seller application status
   const updateSellerStatus = async (applicationId: string, newStatus: 'approved' | 'rejected') => {
     try {
-      // Get the application data to find the userId
-      const applicationDoc = await getDocs(query(
-        collection(db, 'sellerApplications'),
-        where('__name__', '==', applicationId)
-      ));
-
-      if (applicationDoc.empty) {
-        throw new Error('Application not found');
-      }
-
-      const applicationData = applicationDoc.docs[0].data();
-      const userId = applicationData.userId;
+      const seller = sellers.find((item) => item.id === applicationId);
+      const userId = seller?.userId;
 
       if (!userId) {
         throw new Error('User ID not found in application');
@@ -391,15 +344,7 @@ const SellerManagementPageMobile: React.FC = () => {
   const fetchSellerProducts = async (sellerId: string) => {
     setLoadingProducts(true);
     try {
-      const productsQuery = query(
-        collection(db, 'products'),
-        where('storeId', '==', sellerId)
-      );
-      const snapshot = await getDocs(productsQuery);
-      const products = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const products = await getProductsBySeller(sellerId);
       setSellerProducts(products);
     } catch (error: any) {
       console.error('Error fetching seller products:', error);
@@ -443,9 +388,9 @@ const SellerManagementPageMobile: React.FC = () => {
     if (!editingProduct) return;
 
     try {
-      await updateDoc(doc(db, 'products', editingProduct.id), {
+      await updateProductFields(editingProduct.id, {
         ...editFormData,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
 
       // Update local state
@@ -472,23 +417,14 @@ const SellerManagementPageMobile: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
 
     try {
-      await updateDoc(doc(db, 'products', productId), {
-        status: 'deleted',
-        updatedAt: new Date()
-      });
+      await deleteProduct(productId);
 
       // Update local state
       setSellerProducts(prev => prev.filter(product => product.id !== productId));
 
-      // Update seller stats
+      // Update seller stats locally
       if (selectedSeller) {
-        const newTotalProducts = selectedSeller.stats.totalProducts - 1;
-        await updateDoc(doc(db, 'users', selectedSeller.id), {
-          'stats.totalProducts': newTotalProducts,
-          updatedAt: new Date()
-        });
-
-        // Update local seller state
+        const newTotalProducts = Math.max(0, selectedSeller.stats.totalProducts - 1);
         setSellers(prev => prev.map(seller =>
           seller.id === selectedSeller.id
             ? {
@@ -517,9 +453,9 @@ const SellerManagementPageMobile: React.FC = () => {
     const newStatus = product.status === 'active' ? 'inactive' : 'active';
 
     try {
-      await updateDoc(doc(db, 'products', product.id), {
+      await updateProductFields(product.id, {
         status: newStatus,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
 
       // Update local state
@@ -543,39 +479,32 @@ const SellerManagementPageMobile: React.FC = () => {
   const addProductsToSeller = async (sellerId: string, businessName: string, businessType: string) => {
     setAddingProducts(sellerId);
     try {
-      const batch = writeBatch(db);
       const sampleProducts = generateSampleProducts(sellerId, businessName, businessType);
+      const seller = sellers.find((s) => s.id === sellerId || s.userId === sellerId);
 
-      // Add all products to the batch
-      sampleProducts.forEach(product => {
-        const productRef = doc(collection(db, 'products'));
-        batch.set(productRef, product);
-      });
+      for (const product of sampleProducts) {
+        await saveProduct({
+          ...product,
+          sellerId: seller?.userId || sellerId,
+          sellerName: businessName,
+          sellerEmail: seller?.email,
+        });
+      }
 
-      // Update seller stats
-      const sellerRef = doc(db, 'users', sellerId);
-      const currentSeller = sellers.find(s => s.id === sellerId);
+      const currentSeller = sellers.find(s => s.id === sellerId || s.userId === sellerId);
       const newTotalProducts = (currentSeller?.stats.totalProducts || 0) + 10;
 
-      batch.update(sellerRef, {
-        'stats.totalProducts': newTotalProducts,
-        updatedAt: new Date()
-      });
-
-      // Commit the batch
-      await batch.commit();
-
       // Update local state
-      setSellers(prev => prev.map(seller =>
-        seller.id === sellerId
+      setSellers(prev => prev.map(s =>
+        s.id === sellerId || s.userId === sellerId
           ? {
-            ...seller,
+            ...s,
             stats: {
-              ...seller.stats,
+              ...s.stats,
               totalProducts: newTotalProducts
             }
           }
-          : seller
+          : s
       ));
 
       setMessage(`Successfully added 10 products to ${businessName}!`);
@@ -607,36 +536,40 @@ const SellerManagementPageMobile: React.FC = () => {
 
       console.log('Adding new seller:', newSellerData);
 
-      const userData = {
-        name: newSellerData.name,
+      const profileId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const client = getSupabaseBrowserClient();
+
+      const { error: profileError } = await client.from('profiles').upsert({
+        id: profileId,
         email: newSellerData.email,
+        display_name: newSellerData.name,
         phone: newSellerData.phone,
-        role: 'shop',
-        status: 'approved',
-        businessName: newSellerData.businessName,
-        businessType: newSellerData.businessType,
         address: newSellerData.address,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        stats: {
-          totalProducts: 0,
-          totalSales: 0,
-          totalOrders: 0,
-          rating: 0
+        role: 'shop',
+        created_at: now,
+        updated_at: now,
+        raw: {
+          uid: profileId,
+          name: newSellerData.name,
+          email: newSellerData.email,
+          phone: newSellerData.phone,
+          role: 'shop',
+          status: 'approved',
+          businessName: newSellerData.businessName,
+          businessType: newSellerData.businessType,
+          address: newSellerData.address,
+          stats: {
+            totalProducts: 0,
+            totalSales: 0,
+            totalOrders: 0,
+            rating: 0,
+          },
         },
-        documents: {
-          gst: '',
-          pan: '',
-          bankAccount: '',
-          ifsc: ''
-        }
-      };
+      });
+      if (profileError) throw profileError;
 
-      const userDocRef = await addDoc(collection(db, 'users'), userData);
-      console.log('User document created:', userDocRef.id);
-
-      await addSellerEmail(newSellerData.email);
-      console.log('Seller email added to sellers collection');
+      await addSellerEmail(newSellerData.email, profileId);
 
       setNewSellerData({
         name: '',
@@ -678,7 +611,6 @@ const SellerManagementPageMobile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-6">
         {/* Header */}

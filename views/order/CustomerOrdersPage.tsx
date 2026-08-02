@@ -14,7 +14,6 @@ import {
   Store,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { fetchCustomerOrders } from '@/lib/orders/firestore';
 import { ORDER_STATUS_LABELS, type OrderRecord } from '@/lib/orders/types';
@@ -53,7 +52,6 @@ const CustomerOrdersPage: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#FDFCFB]">
-        <Navbar />
         <div className="max-w-lg mx-auto px-4 py-24 text-center">
           <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Sign in to view orders</h1>
@@ -65,7 +63,6 @@ const CustomerOrdersPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] pb-20">
-      <Navbar />
       <div className="max-w-4xl mx-auto px-4 py-8">
         <Link href="/profile" className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-4">
           <ArrowLeft className="w-4 h-4 mr-1" />

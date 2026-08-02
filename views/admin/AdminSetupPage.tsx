@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, Key, CheckCircle, AlertCircle } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { addAdminEmail } from '@/firebase/adminSetup';
 
@@ -36,7 +35,6 @@ const AdminSetupPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar userRole="admin" />
 
       <div className="main-content pt-24">
         <div className="min-h-screen flex items-center justify-center px-4">

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Package, User, TrendingUp, DollarSign } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import Navbar from '@/components/layout/Navbar';
 import ProductCard from '@/components/product/ProductCard';
 import FormInput from '@/components/ui/FormInput';
 import Button from '@/components/ui/Button';
@@ -112,7 +111,6 @@ const ShopDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar userRole="shop" />
 
       {/* Toast Notifications */}
       {toasts.map(toast => (

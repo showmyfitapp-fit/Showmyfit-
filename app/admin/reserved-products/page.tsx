@@ -4,7 +4,6 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import AdminReservedProducts from '@/components/admin/AdminReservedProducts';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -15,7 +14,6 @@ export default function Page() {
     if (!currentUser || userData?.role !== 'admin') {
         return (
             <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-                <Navbar />
                 <div className="container mx-auto px-4 py-8">
                     <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
                         <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -32,7 +30,6 @@ export default function Page() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-            <Navbar userRole="admin" />
             <div className="main-content pt-24">
                 <div className="min-h-screen px-4 py-8">
                     <div className="max-w-7xl mx-auto">

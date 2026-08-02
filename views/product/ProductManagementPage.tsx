@@ -7,12 +7,14 @@ import {
   DollarSign, ShoppingCart, Eye, Save, X, Image as ImageIcon,
   Tag, Calendar, TrendingUp, BarChart3
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import ImageUpload from '@/components/common/ImageUpload';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import {
+  deleteProduct,
+  getProducts,
+  saveProduct,
+} from '@/lib/supabase/admin';
 import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
 import { useCategories } from '@/hooks/useCategories';
 import { formatCategoryName } from '@/lib/categories/format';
@@ -199,14 +201,7 @@ const ProductManagementPage: React.FC = () => {
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const productsQuery = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      const productsSnapshot = await getDocs(productsQuery);
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as Product[];
+      const productsData = (await getProducts()) as Product[];
       setProducts(productsData);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -256,13 +251,11 @@ const ProductManagementPage: React.FC = () => {
       };
 
       if (editingProduct) {
-        // Update existing product
-        await updateDoc(doc(db, 'products', editingProduct.id!), productData);
+        await saveProduct(productData, editingProduct.id!);
         setMessage('Product updated successfully!');
       } else {
-        // Add new product
         productData.createdAt = new Date();
-        await addDoc(collection(db, 'products'), productData);
+        await saveProduct(productData);
         setMessage('Product added successfully!');
       }
 
@@ -317,7 +310,7 @@ const ProductManagementPage: React.FC = () => {
   const handleDelete = async (productId: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
-        await deleteDoc(doc(db, 'products', productId));
+        await deleteProduct(productId);
         setMessage('Product deleted successfully!');
         setIsSuccess(true);
         loadProducts();
@@ -344,7 +337,6 @@ const ProductManagementPage: React.FC = () => {
   if (!currentUser || userData?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
-        <Navbar userRole="user" />
         <div className="main-content pt-24">
           <div className="min-h-screen flex items-center justify-center px-4">
             <div className="text-center">
@@ -362,7 +354,6 @@ const ProductManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar userRole="admin" />
 
       <div className="main-content pt-24">
         <div className="min-h-screen px-4 py-8">

@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, doc, updateDoc, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getOrders } from '@/lib/supabase/admin';
 import {
   ShoppingBag,
   Search,
@@ -22,7 +21,6 @@ import {
   TrendingUp,
   DollarSign
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 
 interface Order {
@@ -75,7 +73,6 @@ const OrderManagementPage: React.FC = () => {
   if (!currentUser || userData?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -90,30 +87,23 @@ const OrderManagementPage: React.FC = () => {
     );
   }
 
-  // Load orders
+  // Load orders (Supabase orders table not migrated yet)
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const ordersQuery = query(
-        collection(db, 'orders'),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(ordersQuery);
-      const ordersData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-        id: doc.id,
+      const rows = await getOrders();
+      const ordersData = rows.map((data) => ({
+        id: data.id,
         ...data,
-        orderNumber: data.orderNumber || `ORD-${doc.id.slice(0, 6).toUpperCase()}`,
+        orderNumber: data.orderNumber || `ORD-${String(data.id).slice(0, 6).toUpperCase()}`,
         customerName: data.customerName || 'Customer',
         customerEmail: data.customerEmail || '',
         customerPhone: data.customerPhone || '',
         status: data.status || data.orderStatus || 'placed',
         total: data.total ?? data.totalAmount ?? 0,
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      };
-      }) as Order[];
+        createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+        updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),
+      })) as Order[];
       setOrders(ordersData);
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -131,10 +121,7 @@ const OrderManagementPage: React.FC = () => {
   // Update order status
   const updateOrderStatus = async (orderId: string, status: string) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status,
-        updatedAt: new Date()
-      });
+      // Orders are not in Supabase yet — update local UI only.
       setOrders(orders.map(order =>
         order.id === orderId ? { ...order, status: status as any, updatedAt: new Date() } : order
       ));
@@ -198,7 +185,6 @@ const OrderManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -245,7 +231,6 @@ const OrderManagementPage: React.FC = () => {
             {message}
           </div>
         )}
-
 
         {/* Orders List */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">

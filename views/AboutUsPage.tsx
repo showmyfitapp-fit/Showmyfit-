@@ -1,11 +1,9 @@
 import React from 'react';
-import Navbar from '../components/layout/Navbar';
 import { Users, ShoppingBag, TrendingUp, Heart, Sparkles, Target, Zap, Shield } from 'lucide-react';
 
 const AboutUsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <Navbar userRole="user" />
       <div className="main-content px-4 py-6 pt-28">
         <div className="max-w-6xl mx-auto">
           {/* Hero Section */}

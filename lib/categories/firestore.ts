@@ -1,48 +1,76 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  Timestamp,
-  deleteDoc,
-} from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getSetting, upsertSetting } from '@/lib/supabase/admin';
 import { DEFAULT_CATEGORIES } from './defaultCategories';
 import { getCategoryDocId } from './slug';
-import type { CategoryDocument, CategorySeedItem } from './types';
+import type { CategoryDocument } from './types';
 
-function mapDoc(id: string, data: Record<string, unknown>): CategoryDocument {
-  return {
-    slug: data.slug as string,
-    name: data.name as string,
-    parentSlug: (data.parentSlug as string | null) ?? null,
-    icon: data.icon as string | undefined,
-    image: data.image as string | undefined,
-    description: data.description as string | undefined,
-    seoTitle: data.seoTitle as string | undefined,
-    seoDescription: data.seoDescription as string | undefined,
-    keywords: (data.keywords as string[]) || [],
-    displayOrder: (data.displayOrder as number) ?? 0,
-    isActive: data.isActive !== false,
-    createdAt: (data.createdAt as Timestamp)?.toDate?.() || undefined,
-    updatedAt: (data.updatedAt as Timestamp)?.toDate?.() || undefined,
-  };
+const SETTINGS_ID = 'categories';
+
+function flattenDefaults(): CategoryDocument[] {
+  const rows: CategoryDocument[] = [];
+  DEFAULT_CATEGORIES.forEach((category, index) => {
+    rows.push({
+      slug: category.slug,
+      name: category.name,
+      parentSlug: null,
+      icon: category.icon,
+      image: category.image,
+      description: category.description,
+      seoTitle: category.seoTitle,
+      seoDescription: category.seoDescription,
+      keywords: category.keywords || [],
+      displayOrder: category.displayOrder ?? index + 1,
+      isActive: true,
+    });
+
+    (category.subcategories || []).forEach((sub, subIndex) => {
+      rows.push({
+        slug: sub.slug,
+        name: sub.name,
+        parentSlug: category.slug,
+        seoTitle: sub.seoTitle,
+        seoDescription: sub.seoDescription,
+        keywords: sub.keywords || [],
+        displayOrder: sub.displayOrder ?? subIndex + 1,
+        isActive: true,
+      });
+    });
+  });
+  return rows;
+}
+
+async function readCategories(): Promise<CategoryDocument[]> {
+  const row = await getSetting(SETTINGS_ID);
+  const list = Array.isArray(row?.data?.items) ? row!.data.items : null;
+  if (!list || !list.length) {
+    return flattenDefaults();
+  }
+  return list.map((item: CategoryDocument) => ({
+    ...item,
+    parentSlug: item.parentSlug ?? null,
+    keywords: item.keywords || [],
+    displayOrder: item.displayOrder ?? 0,
+    isActive: item.isActive !== false,
+  }));
+}
+
+async function writeCategories(categories: CategoryDocument[]): Promise<void> {
+  await upsertSetting(SETTINGS_ID, {
+    items: categories,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function fetchAllCategories(): Promise<CategoryDocument[]> {
-  const snapshot = await getDocs(collection(db, 'categories'));
-  return snapshot.docs
-    .map((d) => mapDoc(d.id, d.data()))
+  const all = await readCategories();
+  return all
     .filter((c) => c.isActive)
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
 /** Admin view — includes inactive categories. */
 export async function fetchAllCategoriesAdmin(): Promise<CategoryDocument[]> {
-  const snapshot = await getDocs(collection(db, 'categories'));
-  return snapshot.docs
-    .map((d) => mapDoc(d.id, d.data()))
-    .sort((a, b) => a.displayOrder - b.displayOrder);
+  const all = await readCategories();
+  return all.sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
 export async function fetchTopLevelCategories(): Promise<CategoryDocument[]> {
@@ -58,65 +86,14 @@ export async function fetchSubcategories(parentSlug: string): Promise<CategoryDo
 }
 
 export async function categoriesCollectionIsEmpty(): Promise<boolean> {
-  const snapshot = await getDocs(collection(db, 'categories'));
-  return snapshot.empty;
-}
-
-function buildCategoryPayload(
-  item: CategorySeedItem | Omit<CategoryDocument, 'createdAt' | 'updatedAt'>,
-  parentSlug: string | null
-): Record<string, unknown> {
-  const now = Timestamp.now();
-  return {
-    slug: item.slug,
-    name: item.name,
-    parentSlug,
-    icon: 'icon' in item ? item.icon : undefined,
-    image: 'image' in item ? item.image : undefined,
-    description: 'description' in item ? item.description : undefined,
-    seoTitle: item.seoTitle,
-    seoDescription: item.seoDescription,
-    keywords: item.keywords || [],
-    displayOrder: item.displayOrder ?? 0,
-    isActive: true,
-    updatedAt: now,
-    createdAt: now,
-  };
+  const row = await getSetting(SETTINGS_ID);
+  return !Array.isArray(row?.data?.items) || row.data.items.length === 0;
 }
 
 export async function seedDefaultCategories(): Promise<number> {
-  let count = 0;
-  for (const category of DEFAULT_CATEGORIES) {
-    const parentId = getCategoryDocId(category.slug, null);
-    await setDoc(doc(db, 'categories', parentId), buildCategoryPayload(category, null), {
-      merge: true,
-    });
-    count += 1;
-
-    for (let i = 0; i < (category.subcategories?.length || 0); i++) {
-      const sub = category.subcategories![i];
-      const subId = getCategoryDocId(sub.slug, category.slug);
-      await setDoc(
-        doc(db, 'categories', subId),
-        {
-          ...buildCategoryPayload(
-            {
-              slug: sub.slug,
-              name: sub.name,
-              seoTitle: sub.seoTitle,
-              seoDescription: sub.seoDescription,
-              keywords: sub.keywords,
-              displayOrder: i + 1,
-            },
-            category.slug
-          ),
-        },
-        { merge: true }
-      );
-      count += 1;
-    }
-  }
-  return count;
+  const defaults = flattenDefaults();
+  await writeCategories(defaults);
+  return defaults.length;
 }
 
 export async function ensureCategoriesSeeded(): Promise<void> {
@@ -129,50 +106,58 @@ export async function ensureCategoriesSeeded(): Promise<void> {
 export async function saveCategory(
   data: Omit<CategoryDocument, 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<void> {
+  const categories = await readCategories();
   const docId = data.id || getCategoryDocId(data.slug, data.parentSlug);
-  const existing = await getDocs(collection(db, 'categories'));
-  const found = existing.docs.find((d) => d.id === docId);
-  const now = Timestamp.now();
+  const next: CategoryDocument = {
+    slug: data.slug,
+    name: data.name,
+    parentSlug: data.parentSlug,
+    icon: data.icon,
+    image: data.image,
+    description: data.description,
+    seoTitle: data.seoTitle,
+    seoDescription: data.seoDescription,
+    keywords: data.keywords || [],
+    displayOrder: data.displayOrder ?? 0,
+    isActive: data.isActive !== false,
+  };
 
-  await setDoc(
-    doc(db, 'categories', docId),
-    {
-      slug: data.slug,
-      name: data.name,
-      parentSlug: data.parentSlug,
-      icon: data.icon || null,
-      image: data.image || null,
-      description: data.description || null,
-      seoTitle: data.seoTitle || null,
-      seoDescription: data.seoDescription || null,
-      keywords: data.keywords || [],
-      displayOrder: data.displayOrder ?? 0,
-      isActive: data.isActive !== false,
-      updatedAt: now,
-      ...(found ? {} : { createdAt: now }),
-    },
-    { merge: true }
+  const index = categories.findIndex(
+    (item) => getCategoryDocId(item.slug, item.parentSlug) === docId
   );
+  if (index >= 0) {
+    categories[index] = next;
+  } else {
+    categories.push(next);
+  }
+  await writeCategories(categories);
 }
 
 export async function deactivateCategory(
   slug: string,
   parentSlug: string | null
 ): Promise<void> {
+  const categories = await readCategories();
   const docId = getCategoryDocId(slug, parentSlug);
-  await setDoc(
-    doc(db, 'categories', docId),
-    { isActive: false, updatedAt: Timestamp.now() },
-    { merge: true }
+  const updated = categories.map((item) =>
+    getCategoryDocId(item.slug, item.parentSlug) === docId
+      ? { ...item, isActive: false }
+      : item
   );
+  await writeCategories(updated);
 }
 
 export async function deleteCategoryPermanently(
   slug: string,
   parentSlug: string | null
 ): Promise<void> {
+  const categories = await readCategories();
   const docId = getCategoryDocId(slug, parentSlug);
-  await deleteDoc(doc(db, 'categories', docId));
+  await writeCategories(
+    categories.filter(
+      (item) => getCategoryDocId(item.slug, item.parentSlug) !== docId
+    )
+  );
 }
 
 export function groupCategoriesByParent(categories: CategoryDocument[]): {

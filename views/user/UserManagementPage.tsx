@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProfiles, updateProfileStatus } from '@/lib/supabase/admin';
 import {
   Users,
   Calendar,
@@ -18,7 +17,6 @@ import {
   TrendingUp,
   ShoppingBag
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 
 interface User {
@@ -54,21 +52,29 @@ const UserManagementPage: React.FC = () => {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const usersQuery = query(
-        collection(db, 'users'),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(usersQuery);
-      const usersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        lastLoginAt: doc.data().lastLoginAt?.toDate(),
+      const profiles = await getProfiles();
+      const usersData = profiles.map((profile) => ({
+        id: profile.id,
+        name: profile.displayName || 'Unknown User',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        address: profile.address || '',
+        role: (profile.role || 'user') as User['role'],
+        status: (profile.status || 'active') as User['status'],
+        createdAt:
+          profile.createdAt instanceof Date
+            ? profile.createdAt
+            : new Date(profile.createdAt || Date.now()),
+        lastLoginAt: profile.lastLoginAt
+          ? profile.lastLoginAt instanceof Date
+            ? profile.lastLoginAt
+            : new Date(profile.lastLoginAt)
+          : undefined,
         stats: {
-          totalOrders: doc.data().stats?.totalOrders || 0,
-          totalSpent: doc.data().stats?.totalSpent || 0,
-          totalReviews: doc.data().stats?.totalReviews || 0
-        }
+          totalOrders: profile.stats?.totalOrders || 0,
+          totalSpent: profile.stats?.totalSpent || 0,
+          totalReviews: profile.stats?.totalReviews || 0,
+        },
       })) as User[];
       setUsers(usersData);
     } catch (error) {
@@ -90,7 +96,6 @@ const UserManagementPage: React.FC = () => {
   if (!currentUser || userData?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -108,10 +113,7 @@ const UserManagementPage: React.FC = () => {
   // Update user status
   const updateUserStatus = async (userId: string, status: 'active' | 'inactive' | 'suspended') => {
     try {
-      await updateDoc(doc(db, 'users', userId), {
-        status,
-        updatedAt: new Date()
-      });
+      await updateProfileStatus(userId, status);
       setUsers(users.map(user =>
         user.id === userId ? { ...user, status } : user
       ));
@@ -163,7 +165,6 @@ const UserManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -204,7 +205,6 @@ const UserManagementPage: React.FC = () => {
             {message}
           </div>
         )}
-
 
         {/* Users List */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">

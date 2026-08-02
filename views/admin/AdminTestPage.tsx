@@ -3,11 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { listAdminEmails } from '@/lib/supabase/admin';
 
 const AdminTestPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
@@ -23,23 +21,14 @@ const AdminTestPage: React.FC = () => {
     try {
       console.log('Checking admin status for:', currentUser.email);
 
-      // Check if email exists in admins collection
-      const adminsQuery = query(collection(db, 'admins'), where('email', '==', currentUser.email));
-      const adminsSnapshot = await getDocs(adminsQuery);
-      const adminExists = !adminsSnapshot.empty;
-
-      console.log('Admin query result:', {
-        email: currentUser.email,
-        adminExists,
-        docsCount: adminsSnapshot.docs.length,
-        userRole: userData?.role
-      });
+      const emails = await listAdminEmails();
+      const adminExists = emails.includes(currentUser.email.toLowerCase());
 
       setAdminCheck({
         email: currentUser.email,
         adminExists,
         userRole: userData?.role,
-        adminData: adminExists ? adminsSnapshot.docs[0].data() : null
+        adminData: adminExists ? { email: currentUser.email } : null
       });
     } catch (error: any) {
       console.error('Error checking admin status:', error);
@@ -64,7 +53,6 @@ const AdminTestPage: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
-        <Navbar userRole="user" />
         <div className="main-content pt-24">
           <div className="min-h-screen flex items-center justify-center px-4">
             <div className="text-center">
@@ -82,7 +70,6 @@ const AdminTestPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
-      <Navbar userRole={userData?.role || 'user'} />
 
       <div className="main-content pt-24">
         <div className="min-h-screen px-4 py-8">

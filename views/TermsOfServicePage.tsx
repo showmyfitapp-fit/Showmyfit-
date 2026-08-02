@@ -1,10 +1,8 @@
 import React from 'react';
-import Navbar from '../components/layout/Navbar';
 
 const TermsOfServicePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-cream via-white to-primary-50">
-      <Navbar userRole="user" />
       <div className="main-content px-4 py-6 pt-28">
         <div className="max-w-4xl mx-auto">
           {/* Header */}

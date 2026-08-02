@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertCircle, Search, Filter } from 'lucide-react';
-import { collection, query, getDocs, orderBy, updateDoc, doc, where } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 
 interface ReservedProduct {
   id: string;
@@ -34,20 +32,8 @@ const AdminReservedProducts: React.FC = () => {
   const fetchReservedProducts = async () => {
     try {
       setLoading(true);
-      const q = query(
-        collection(db, 'reservedProducts'),
-        orderBy('reservedAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const products = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        reservedAt: doc.data().reservedAt?.toDate(),
-        expiresAt: doc.data().expiresAt?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate()
-      })) as ReservedProduct[];
-      setReservedProducts(products);
+      // reserved_products table is not in Supabase yet
+      setReservedProducts([]);
     } catch (error) {
       console.error('Error fetching reserved products:', error);
     } finally {
@@ -57,14 +43,9 @@ const AdminReservedProducts: React.FC = () => {
 
   const updateReservationStatus = async (reservationId: string, newStatus: 'confirmed' | 'cancelled') => {
     try {
-      await updateDoc(doc(db, 'reservedProducts', reservationId), {
-        status: newStatus,
-        updatedAt: new Date()
-      });
-      
-      setReservedProducts(prev => 
-        prev.map(product => 
-          product.id === reservationId 
+      setReservedProducts(prev =>
+        prev.map(product =>
+          product.id === reservationId
             ? { ...product, status: newStatus, updatedAt: new Date() }
             : product
         )

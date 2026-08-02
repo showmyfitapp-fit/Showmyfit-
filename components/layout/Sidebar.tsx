@@ -28,8 +28,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWishlist } from '@/contexts/WishlistContext';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -44,17 +42,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, userRole }) => {
   const { getWishlistCount } = useWishlist();
   const [ordersCount, setOrdersCount] = useState(0);
 
-  // Fetch orders count
+  // Orders are not in Supabase yet — keep badge at 0 until migrated.
   useEffect(() => {
-    const fetchOrdersCount = async () => {
-      if (!currentUser) return;
-      try {
-        const ordersQuery = query(collection(db, 'orders'), where('userId', '==', currentUser.uid));
-        const snapshot = await getDocs(ordersQuery);
-        setOrdersCount(snapshot.docs.length);
-      } catch (e) { console.error(e); }
-    };
-    if (isOpen && currentUser) fetchOrdersCount();
+    if (!isOpen || !currentUser) return;
+    setOrdersCount(0);
   }, [isOpen, currentUser]);
 
   const getMenuItems = () => {

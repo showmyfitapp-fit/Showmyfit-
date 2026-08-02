@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Package, Sparkles, TrendingUp, Filter, Grid, List, Search, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import Navbar from '@/components/layout/Navbar';
 import ProductCard from '@/components/product/ProductCard';
 import SearchBar from '@/components/product/SearchBar';
 import CategoryFilter from '@/components/product/CategoryFilter';
@@ -89,7 +88,6 @@ const UserBrowse: React.FC = () => {
 
   return (
     <div className={`min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/20 transition-all duration-1000 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
-      <Navbar userRole="user" />
 
       {/* Premium Hero Section */}
       <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 overflow-hidden">

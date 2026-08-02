@@ -112,7 +112,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] font-sans">
-      {!hideTopNavbar && <Navbar userRole="user" />}
+      {!hideTopNavbar && <Navbar />}
       <div className={`pt-0 ${hideBottomNav ? 'pb-0 md:pb-4' : 'pb-20 md:pb-4'}`}>
         {children}
       </div>

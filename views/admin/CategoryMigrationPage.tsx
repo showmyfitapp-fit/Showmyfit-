@@ -12,11 +12,9 @@ import {
   CheckCircle,
   Package,
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts, updateProductFields } from '@/lib/supabase/admin';
 import { fetchAllCategoriesAdmin } from '@/lib/categories/firestore';
 import {
   buildProductMigrationUpdate,
@@ -66,15 +64,10 @@ const CategoryMigrationPage: React.FC = () => {
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const [snapshot, categories] = await Promise.all([
-        getDocs(collection(db, 'products')),
+      const [allProducts, categories] = await Promise.all([
+        getProducts() as Promise<ProductMigrationRecord[]>,
         fetchAllCategoriesAdmin(),
       ]);
-
-      const allProducts = snapshot.docs.map((entry) => ({
-        id: entry.id,
-        ...(entry.data() as Omit<ProductMigrationRecord, 'id'>),
-      }));
 
       const candidates = filterProductsNeedingMigration(allProducts);
       const previewList = candidates.map((product) =>
@@ -162,7 +155,7 @@ const CategoryMigrationPage: React.FC = () => {
           continue;
         }
 
-        await updateDoc(doc(db, 'products', product.id), update);
+        await updateProductFields(product.id, update);
 
         setProgress((prev) => ({
           ...prev,
@@ -210,7 +203,6 @@ const CategoryMigrationPage: React.FC = () => {
   if (!currentUser || userData?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-24 text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
@@ -222,7 +214,6 @@ const CategoryMigrationPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>

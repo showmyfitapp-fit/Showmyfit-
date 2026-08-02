@@ -18,11 +18,16 @@ import {
   Calendar,
   BarChart3
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import {
+  deleteHomePageSection,
+  getHomePageSectionsAdmin,
+  getProducts,
+  getSetting,
+  saveHomePageSection,
+  upsertSetting,
+} from '@/lib/supabase/admin';
 
 interface HomePageSection {
   id?: string;
@@ -120,27 +125,12 @@ const HomePageManagement: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load home page sections
-      const sectionsQuery = query(collection(db, 'homePageSections'), orderBy('displayOrder', 'asc'));
-      const sectionsSnapshot = await getDocs(sectionsQuery);
-      const sectionsData = sectionsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as HomePageSection[];
-      setSections(sectionsData);
-
-      // Load products
-      const productsQuery = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      const productsSnapshot = await getDocs(productsQuery);
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
-      })) as Product[];
-      setProducts(productsData);
+      const [sectionsData, productsData] = await Promise.all([
+        getHomePageSectionsAdmin(),
+        getProducts(),
+      ]);
+      setSections(sectionsData as HomePageSection[]);
+      setProducts(productsData as Product[]);
     } catch (error) {
       console.error('Error loading data:', error);
       setMessage('Error loading data');
@@ -153,9 +143,9 @@ const HomePageManagement: React.FC = () => {
   // Load promotional card settings
   const loadPromotionalSettings = async () => {
     try {
-      const settingsDoc = await getDoc(doc(db, 'settings', 'promotionalCards'));
-      if (settingsDoc.exists()) {
-        const data = settingsDoc.data();
+      const settingsDoc = await getSetting('promotionalCards');
+      if (settingsDoc?.data) {
+        const data = settingsDoc.data;
         setPromotionalCards({
           electronics: data.electronics?.discountPercentage?.toString() || '',
           fashion: data.fashion?.discountPercentage?.toString() || '',
@@ -178,7 +168,6 @@ const HomePageManagement: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <p className="text-gray-600">Loading...</p>
@@ -191,7 +180,6 @@ const HomePageManagement: React.FC = () => {
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
@@ -217,13 +205,11 @@ const HomePageManagement: React.FC = () => {
       };
 
       if (editingSection) {
-        // Update existing section
-        await updateDoc(doc(db, 'homePageSections', editingSection.id!), sectionData);
+        await saveHomePageSection(sectionData, editingSection.id!);
         setMessage('Section updated successfully!');
       } else {
-        // Add new section
         sectionData.createdAt = new Date();
-        await addDoc(collection(db, 'homePageSections'), sectionData);
+        await saveHomePageSection(sectionData);
         setMessage('Section added successfully!');
       }
 
@@ -269,7 +255,7 @@ const HomePageManagement: React.FC = () => {
   const handleDelete = async (sectionId: string) => {
     if (window.confirm('Are you sure you want to delete this section?')) {
       try {
-        await deleteDoc(doc(db, 'homePageSections', sectionId));
+        await deleteHomePageSection(sectionId);
         setMessage('Section deleted successfully!');
         setIsSuccess(true);
         loadData();
@@ -281,14 +267,13 @@ const HomePageManagement: React.FC = () => {
     }
   };
 
-
   // Toggle section active status
   const toggleActive = async (section: HomePageSection) => {
     try {
-      await updateDoc(doc(db, 'homePageSections', section.id!), {
-        isActive: !section.isActive,
-        updatedAt: new Date()
-      });
+      await saveHomePageSection(
+        { ...section, isActive: !section.isActive, updatedAt: new Date() },
+        section.id!
+      );
       setMessage(`Section ${!section.isActive ? 'activated' : 'deactivated'} successfully!`);
       setIsSuccess(true);
       loadData();
@@ -346,7 +331,7 @@ const HomePageManagement: React.FC = () => {
       ];
 
       for (const section of sampleSections) {
-        await addDoc(collection(db, 'homePageSections'), section);
+        await saveHomePageSection(section);
       }
 
       setMessage('Sample sections created successfully!');
@@ -374,33 +359,22 @@ const HomePageManagement: React.FC = () => {
 
     setLoading(true);
     try {
-      // First try to update existing document
-      const settingsRef = doc(db, 'settings', 'promotionalCards');
-
-      try {
-        await updateDoc(settingsRef, {
-          [cardType]: {
-            discountPercentage: Number(discountValue),
-            updatedAt: new Date()
-          }
-        });
-      } catch (updateError) {
-        // If document doesn't exist, create it
-        console.log('Document does not exist, creating new one...');
-        await setDoc(settingsRef, {
-          [cardType]: {
-            discountPercentage: Number(discountValue),
-            updatedAt: new Date()
-          }
-        }, { merge: true });
-      }
+      const existing = await getSetting('promotionalCards');
+      const data = {
+        ...(existing?.data || {}),
+        [cardType]: {
+          discountPercentage: Number(discountValue),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      await upsertSetting('promotionalCards', data);
 
       setMessage(`Applied ${discountValue}% discount to ${cardType} promotional card!`);
       setIsSuccess(true);
 
       // Clear the input
       setPromotionalCards({ ...promotionalCards, [cardType]: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error applying promotional discount:', error);
       setMessage(`Error applying discount: ${error.message}`);
       setIsSuccess(false);
@@ -434,7 +408,6 @@ const HomePageManagement: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar userRole="admin" />
 
       <div className="main-content pt-24">
         <div className="min-h-screen px-4 py-8">
@@ -462,7 +435,6 @@ const HomePageManagement: React.FC = () => {
                   Add Section
                 </Button>
               </div>
-
 
               {/* Promotional Cards Management */}
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 mb-6">

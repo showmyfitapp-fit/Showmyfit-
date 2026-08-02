@@ -17,11 +17,13 @@ import {
   Clock,
   Zap
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import {
+  getAdminDashboardData,
+  orderCreatedAt,
+  orderTotal,
+} from '@/lib/supabase/admin';
 
 interface DashboardStats {
   totalUsers: number;
@@ -57,47 +59,37 @@ const AdminDashboard: React.FC = () => {
     const loadStats = async () => {
       setLoading(true);
       try {
-        const usersQuery = query(collection(db, 'users'));
-        const usersSnapshot = await getDocs(usersQuery);
-        const totalUsers = usersSnapshot.docs.length;
-        const activeUsers = usersSnapshot.docs.filter(doc => doc.data().status === 'active').length;
+        const {
+          profiles,
+          sellers,
+          products,
+          pendingApprovals,
+          orders,
+        } = await getAdminDashboardData();
 
-        const sellersQuery = query(collection(db, 'users'), where('role', '==', 'shop'));
-        const sellersSnapshot = await getDocs(sellersQuery);
-        const totalSellers = sellersSnapshot.docs.length;
-        const pendingSellers = sellersSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
 
-        const productsQuery = query(collection(db, 'products'));
-        const productsSnapshot = await getDocs(productsQuery);
-        const totalProducts = productsSnapshot.docs.length;
-
-        const ordersQuery = query(collection(db, 'orders'));
-        const ordersSnapshot = await getDocs(ordersQuery);
-        const totalOrders = ordersSnapshot.docs.length;
-        const recentOrders = ordersSnapshot.docs.filter(doc => {
-          const orderDate = doc.data().createdAt?.toDate();
-          const weekAgo = new Date();
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          return orderDate && orderDate > weekAgo;
+        const recentOrders = orders.filter((order) => {
+          return orderCreatedAt(order) > weekAgo;
         }).length;
 
-        let totalRevenue = 0;
-        ordersSnapshot.docs.forEach(doc => {
-          const orderData = doc.data();
-          if (orderData.status === 'delivered' && orderData.total) {
-            totalRevenue += orderData.total;
+        const totalRevenue = orders.reduce((sum, order) => {
+          if (order.status === 'delivered') {
+            return sum + orderTotal(order);
           }
-        });
+          return sum;
+        }, 0);
 
         setStats({
-          totalUsers,
-          totalSellers,
-          totalProducts,
-          totalOrders,
-          pendingSellers,
+          totalUsers: profiles.length,
+          totalSellers: sellers.length,
+          totalProducts: products.length,
+          totalOrders: orders.length,
+          pendingSellers: pendingApprovals.length,
           recentOrders,
           totalRevenue,
-          activeUsers
+          activeUsers: profiles.length,
         });
       } catch (error) {
         console.error('Error loading dashboard stats:', error);
@@ -111,12 +103,10 @@ const AdminDashboard: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
-            <p className="text-gray-600">Loading...</p>
-          </div>
+      <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center px-4 admin-content">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-red-200 border-t-red-600" />
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -124,17 +114,14 @@ const AdminDashboard: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-            <p className="text-gray-600 mb-6">You need admin access to view the dashboard.</p>
-            <Button onClick={() => window.location.href = '/profile'} variant="primary" size="lg">
-              Go to Profile
-            </Button>
-          </div>
+      <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center px-4 admin-content">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600 mb-6">You need admin access to view the dashboard.</p>
+          <Button onClick={() => window.location.href = '/profile'} variant="primary" size="lg">
+            Go to Profile
+          </Button>
         </div>
       </div>
     );
@@ -226,7 +213,6 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}

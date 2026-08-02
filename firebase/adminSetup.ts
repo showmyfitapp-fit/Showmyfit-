@@ -1,29 +1,19 @@
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from './config';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
-// Add admin email to the admins collection
+// Add admin email to the Supabase admins table
 export const addAdminEmail = async (email: string) => {
   try {
-    await setDoc(doc(db, 'admins', email), {
-      email: email,
+    const normalized = email.trim().toLowerCase();
+    const { error } = await getSupabaseBrowserClient().from('admins').upsert({
+      id: normalized,
+      email: normalized,
       role: 'admin',
-      permissions: [
-        'manage_users',
-        'manage_sellers', 
-        'manage_products',
-        'view_analytics',
-        'manage_orders',
-        'system_settings'
-      ],
-      createdAt: new Date(),
-      isActive: true
+      created_at: new Date().toISOString(),
     });
-    console.log(`Admin email ${email} added successfully!`);
+    if (error) throw error;
+    console.log(`Admin email ${normalized} added successfully!`);
   } catch (error) {
     console.error('Error adding admin email:', error);
     throw error;
   }
 };
-
-// You can call this function with your admin email
-// Example: addAdminEmail('admin@showmyfit.com');

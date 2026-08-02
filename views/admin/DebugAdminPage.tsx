@@ -3,11 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, CheckCircle, AlertCircle, RefreshCw, Database } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProfiles, listAdminEmails } from '@/lib/supabase/admin';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const DebugAdminPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
@@ -25,46 +24,31 @@ const DebugAdminPage: React.FC = () => {
       console.log('Current User Email:', currentUser.email);
       console.log('User Data Role:', userData?.role);
 
-      // Check all admins in collection
-      const allAdminsSnapshot = await getDocs(collection(db, 'admins'));
-      console.log('All admins docs:', allAdminsSnapshot.docs.length);
+      const emails = await listAdminEmails();
+      const allAdmins = emails.map((email) => ({ id: email, data: { email } }));
+      const emailResults = allAdmins.filter(
+        (admin) => admin.data.email === currentUser.email?.toLowerCase()
+      );
 
-      const allAdmins = allAdminsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        data: doc.data()
-      }));
-      console.log('All admins data:', allAdmins);
-
-      // Check specific email query
-      const emailQuery = query(collection(db, 'admins'), where('email', '==', currentUser.email));
-      const emailSnapshot = await getDocs(emailQuery);
-      console.log('Email query results:', emailSnapshot.docs.length);
-
-      const emailResults = emailSnapshot.docs.map(doc => ({
-        id: doc.id,
-        data: doc.data()
-      }));
-      console.log('Email query data:', emailResults);
-
-      // Check if user document exists
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      console.log('User document exists:', userDoc.exists());
-      if (userDoc.exists()) {
-        console.log('User document data:', userDoc.data());
-      }
+      const { data: profile } = await getSupabaseBrowserClient()
+        .from('profiles')
+        .select('*')
+        .or(`id.eq.${currentUser.uid},auth_user_id.eq.${currentUser.uid}`)
+        .maybeSingle();
 
       setDebugInfo({
         currentUserEmail: currentUser.email,
         userDataRole: userData?.role,
-        allAdminsCount: allAdminsSnapshot.docs.length,
-        allAdmins: allAdmins,
-        emailQueryCount: emailSnapshot.docs.length,
+        allAdminsCount: allAdmins.length,
+        allAdmins,
+        emailQueryCount: emailResults.length,
         emailQueryResults: emailResults,
-        userDocExists: userDoc.exists(),
-        userDocData: userDoc.exists() ? userDoc.data() : null
+        userDocExists: Boolean(profile),
+        userDocData: profile,
+        profilesCount: (await getProfiles()).length,
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Debug check error:', error);
       setDebugInfo({ error: error.message });
     } finally {
@@ -79,7 +63,6 @@ const DebugAdminPage: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
-        <Navbar userRole="user" />
         <div className="main-content pt-24">
           <div className="min-h-screen flex items-center justify-center px-4">
             <div className="text-center">
@@ -97,7 +80,6 @@ const DebugAdminPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
-      <Navbar userRole={userData?.role || 'user'} />
 
       <div className="main-content pt-24">
         <div className="min-h-screen px-4 py-8">

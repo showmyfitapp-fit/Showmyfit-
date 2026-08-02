@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, doc, updateDoc, addDoc, query } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getAdminSettings, saveAdminSettings } from '@/lib/supabase/admin';
 import {
   Settings,
   Save,
@@ -21,7 +20,6 @@ import {
   ShoppingBag,
   TrendingUp
 } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
 import Button from '@/components/ui/Button';
 
 interface AdminSettings {
@@ -77,85 +75,64 @@ const AdminSettingsPage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const isAdmin = Boolean(currentUser && userData?.role === 'admin');
 
+  const loadSettings = async () => {
+    setLoading(true);
+    try {
+      const existing = await getAdminSettings();
+      if (existing) {
+        setSettings((prev) => ({
+          ...prev,
+          ...existing,
+          id: 'adminSettings',
+          updatedAt: existing.updatedAt
+            ? new Date(existing.updatedAt)
+            : new Date(),
+        }));
+      } else {
+        const defaults: AdminSettings = {
+          siteName: 'Showmyfit',
+          siteDescription: 'Your trusted e-commerce platform',
+          contactEmail: 'admin@showmyfit.com',
+          contactPhone: '+91 9876543210',
+          address: '123 Business Street, City, State 12345',
+          currency: 'INR',
+          timezone: 'Asia/Kolkata',
+          maintenanceMode: false,
+          registrationEnabled: true,
+          sellerRegistrationEnabled: true,
+          emailNotifications: true,
+          smsNotifications: false,
+          autoApproveSellers: false,
+          maxProductsPerSeller: 1000,
+          commissionRate: 5,
+          shippingCost: 50,
+          freeShippingThreshold: 500,
+          taxRate: 18,
+          updatedAt: new Date(),
+          id: 'adminSettings',
+        };
+        await saveAdminSettings(defaults);
+        setSettings(defaults);
+      }
+    } catch (error: any) {
+      console.error('Error loading settings:', error);
+      setMessage(`Error loading settings: ${error.message}`);
+      setIsSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (authLoading || !isAdmin) {
       return;
     }
-
-    const loadSettings = async () => {
-      setLoading(true);
-      try {
-        console.log('Loading admin settings...');
-
-        const settingsQuery = query(collection(db, 'adminSettings'));
-        const snapshot = await getDocs(settingsQuery);
-
-        console.log('Settings query result:', {
-          docsCount: snapshot.docs.length,
-          empty: snapshot.empty
-        });
-
-        if (snapshot.empty) {
-          console.log('No settings found, creating default settings');
-          const defaultSettings = {
-            siteName: 'Showmyfit',
-            siteDescription: 'Your trusted e-commerce platform',
-            contactEmail: 'admin@showmyfit.com',
-            contactPhone: '+91 9876543210',
-            address: '123 Business Street, City, State 12345',
-            currency: 'INR',
-            timezone: 'Asia/Kolkata',
-            maintenanceMode: false,
-            registrationEnabled: true,
-            sellerRegistrationEnabled: true,
-            emailNotifications: true,
-            smsNotifications: false,
-            autoApproveSellers: false,
-            maxProductsPerSeller: 1000,
-            commissionRate: 5,
-            shippingCost: 50,
-            freeShippingThreshold: 500,
-            taxRate: 18,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          };
-          const docRef = await addDoc(collection(db, 'adminSettings'), defaultSettings);
-          console.log('Default settings created with ID:', docRef.id);
-          setSettings({
-            ...defaultSettings,
-            id: docRef.id
-          });
-        } else {
-          const settingsData = snapshot.docs[0].data() as AdminSettings;
-          console.log('Settings loaded:', {
-            id: snapshot.docs[0].id,
-            data: settingsData
-          });
-          setSettings({
-            ...settingsData,
-            id: snapshot.docs[0].id
-          });
-        }
-      } catch (error: any) {
-        console.error('Error loading settings:', error);
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message
-        });
-        setMessage(`Error loading settings: ${error.message}`);
-        setIsSuccess(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadSettings();
   }, [authLoading, isAdmin]);
 
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <p className="text-gray-600">Loading...</p>
@@ -168,7 +145,6 @@ const AdminSettingsPage: React.FC = () => {
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-        <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -194,25 +170,13 @@ const AdminSettingsPage: React.FC = () => {
         return;
       }
 
-      console.log('Saving admin settings:', settings);
-
       const settingsData = {
         ...settings,
-        updatedAt: new Date()
+        id: 'adminSettings',
+        updatedAt: new Date(),
       };
-
-      if (settings.id) {
-        console.log('Updating existing settings document:', settings.id);
-        await updateDoc(doc(db, 'adminSettings', settings.id), settingsData);
-        console.log('Settings updated successfully');
-      } else {
-        console.log('Creating new settings document');
-        const docRef = await addDoc(collection(db, 'adminSettings'), settingsData);
-        console.log('Settings created successfully with ID:', docRef.id);
-        // Update local state with the new ID
-        setSettings(prev => ({ ...prev, id: docRef.id }));
-      }
-
+      await saveAdminSettings(settingsData);
+      setSettings(settingsData);
       setMessage('Settings saved successfully!');
       setIsSuccess(true);
       setTimeout(() => setMessage(''), 3000);
@@ -239,7 +203,6 @@ const AdminSettingsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 admin-content">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}

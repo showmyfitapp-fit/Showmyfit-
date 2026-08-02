@@ -9,8 +9,7 @@ import {
   Play, Pause, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts, updateProductFields } from '@/lib/supabase/admin';
 import { compressProductImages, isFirebaseStorageUrl, isAlreadyCompressed } from '@/utils/imageMigration';
 
 interface Product {
@@ -65,18 +64,12 @@ const ImageMigrationPage: React.FC = () => {
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const productsQuery = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      const productsSnapshot = await getDocs(productsQuery);
-      const productsData = productsSnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        .filter((p: any) =>
+      const productsData = ((await getProducts()) as Product[]).filter(
+        (p) =>
           p.image &&
           isFirebaseStorageUrl(p.image) &&
           !isAlreadyCompressed(p.image)
-        ) as Product[];
+      );
 
       setProducts(productsData);
       setMigrationProgress(prev => ({
@@ -137,11 +130,10 @@ const ImageMigrationPage: React.FC = () => {
           undefined
         );
 
-        // Update product in Firestore with new URLs
-        await updateDoc(doc(db, 'products', product.id), {
+        await updateProductFields(product.id, {
           image: result.newImage,
           ...(result.newImages && { images: result.newImages }),
-          updatedAt: new Date()
+          updatedAt: new Date(),
         });
 
         setMigrationProgress(prev => ({
