@@ -214,6 +214,13 @@ export async function resetPassword(email: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await getSupabaseBrowserClient().auth.updateUser({
+    password: newPassword,
+  });
+  if (error) throw error;
+}
+
 export async function listAllAdmins() {
   const { data, error } = await getSupabaseBrowserClient()
     .from('admins')

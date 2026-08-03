@@ -18,6 +18,7 @@ import {
   signOutUser,
   signUp as supabaseSignUp,
   toAppUser,
+  updatePassword as updateSupabasePassword,
   type AppUser,
   type UserData,
 } from '@/firebase/auth';
@@ -43,6 +44,7 @@ interface AuthContextType {
   ) => Promise<any>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
   refreshUserData: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
@@ -148,6 +150,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       signUp(email, password, displayName),
     signOut,
     resetPassword: resetSupabasePassword,
+    updatePassword: updateSupabasePassword,
     refreshUserData,
     loginWithGoogle,
     loginWithFacebook,

@@ -19,6 +19,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const { login, signup, resetPassword, loginWithGoogle, loginWithFacebook } = useAuth();
 
@@ -26,6 +27,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
       if (mode === 'login') {
@@ -40,7 +42,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
         onClose();
       } else if (mode === 'reset') {
         await resetPassword(email);
-        setError('Password reset email sent!');
+        setSuccess('Password reset email sent. Check your inbox.');
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -90,6 +92,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
+            </div>
+          )}
+          {success && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+              {success}
             </div>
           )}
 
@@ -236,7 +243,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
             {mode === 'login' ? (
               <>
                 <button
-                  onClick={() => setMode('reset')}
+                  onClick={() => { setMode('reset'); setError(''); setSuccess(''); }}
                   className="text-sm text-warm-600 hover:text-warm-800 transition-colors"
                 >
                   Forgot your password?
@@ -244,7 +251,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                 <p className="text-sm text-warm-600 mt-3">
                   Don't have an account?{' '}
                   <button
-                    onClick={() => setMode('signup')}
+                    onClick={() => { setMode('signup'); setError(''); setSuccess(''); }}
                     className="text-warm-800 font-medium hover:text-warm-900 transition-colors"
                   >
                     Sign up
@@ -255,7 +262,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
               <p className="text-sm text-warm-600">
                 Already have an account?{' '}
                 <button
-                  onClick={() => setMode('login')}
+                  onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
                   className="text-warm-800 font-medium hover:text-warm-900 transition-colors"
                 >
                   Sign in
@@ -263,7 +270,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
               </p>
             ) : (
               <button
-                onClick={() => setMode('login')}
+                onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
                 className="text-sm text-warm-600 hover:text-warm-800 transition-colors"
               >
                 Back to sign in
