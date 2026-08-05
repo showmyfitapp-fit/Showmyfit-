@@ -1,8 +1,14 @@
-// Image migration utility - compresses existing images in Firebase Storage
-// Downloads images from Storage URLs, compresses them, and re-uploads them
+// Image migration utility - compresses existing images in storage
+// Downloads images from Storage URLs, compresses them, and re-uploads them to Supabase
 
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '../firebase/config';
+import {
+  buildUploadPath,
+  deleteFromSupabaseStorage,
+  extractUploadsPath,
+  getPublicStorageUrl,
+  testSupabaseStorageConnection,
+  uploadToSupabaseStorage,
+} from '@/lib/supabase/storage';
 import { compressImageSmart } from './imageCompression';
 
 export interface ImageMigrationStats {
@@ -20,18 +26,15 @@ export interface ImageMigrationStats {
 export async function downloadImageAsFile(imageUrl: string): Promise<File> {
   console.log('📥 Starting download:', imageUrl.substring(0, 80) + '...');
   
-  // Extract storage path and get fresh download URL
-  const storagePath = extractStoragePath(imageUrl);
+  // Resolve a public URL when we only have a bare storage path
   let downloadUrl = imageUrl;
-  
-  if (storagePath) {
+  if (!imageUrl.startsWith('http')) {
     try {
-      console.log('🔄 Getting fresh download URL from Firebase Storage...');
-      const storageRef = ref(storage, storagePath);
-      downloadUrl = await getDownloadURL(storageRef);
-      console.log('✅ Fresh download URL obtained');
+      downloadUrl = getPublicStorageUrl(imageUrl.replace(/^\/+/, ''));
+      console.log('✅ Resolved Supabase public URL for download');
     } catch (error: any) {
-      console.warn('⚠️ Using original URL (could not get fresh URL):', error.message);
+      console.warn('⚠️ Using original path (could not resolve public URL):', error.message);
+      downloadUrl = imageUrl;
     }
   }
   
@@ -223,74 +226,25 @@ export async function downloadImageAsFile(imageUrl: string): Promise<File> {
 }
 
 /**
- * Extracts Firebase Storage path from a download URL
+ * Extracts storage path from a Supabase or legacy Firebase download URL
  */
 export function extractStoragePath(url: string): string | null {
-  try {
-    console.log('🔍 Extracting storage path from URL:', url.substring(0, 100));
-    
-    // Firebase Storage URLs can have different formats:
-    // 1. https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media&token={token}
-    // 2. https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{pathEncoded}?alt=media&token={token}
-    // 3. https://{bucket}.firebasestorage.app/{path}?alt=media&token={token}
-    
-    // Try format 1 and 2 (with /o/)
-    let match = url.match(/\/o\/([^?]+)/);
-    if (match) {
-      try {
-        // URL might be double-encoded, try decoding twice
-        let decoded = decodeURIComponent(match[1]);
-        // If still contains %2F (encoded /), decode again
-        if (decoded.includes('%2F') || decoded.includes('%')) {
-          decoded = decodeURIComponent(decoded);
-        }
-        console.log('✅ Extracted path (decoded):', decoded);
-        return decoded;
-      } catch (e) {
-        // If decode fails, try using the raw match
-        console.log('⚠️ Decode failed, using raw path:', match[1]);
-        return match[1];
-      }
-    }
-    
-    // Try format 3 (new format)
-    match = url.match(/firebasestorage\.app\/([^?]+)/);
-    if (match) {
-      try {
-        let decoded = decodeURIComponent(match[1]);
-        if (decoded.includes('%2F') || decoded.includes('%')) {
-          decoded = decodeURIComponent(decoded);
-        }
-        console.log('✅ Extracted path (format 3):', decoded);
-        return decoded;
-      } catch {
-        console.log('⚠️ Decode failed, using raw path:', match[1]);
-        return match[1];
-      }
-    }
-    
+  const path = extractUploadsPath(url);
+  if (path) {
+    console.log('✅ Extracted storage path:', path);
+  } else {
     console.warn('⚠️ Could not extract storage path from URL');
-    return null;
-  } catch (error) {
-    console.warn('Error extracting storage path:', error);
-    return null;
   }
+  return path;
 }
 
 /**
- * Deletes an image from Firebase Storage
+ * Deletes an image from Supabase Storage
  */
 export async function deleteImageFromStorage(imageUrl: string): Promise<void> {
   try {
-    const storagePath = extractStoragePath(imageUrl);
-    if (!storagePath) {
-      console.warn('⚠️ Could not extract storage path from URL:', imageUrl);
-      return;
-    }
-    
-    const imageRef = ref(storage, storagePath);
-    await deleteObject(imageRef);
-    console.log('🗑️ Deleted old image from storage:', storagePath);
+    await deleteFromSupabaseStorage(imageUrl);
+    console.log('🗑️ Deleted old image from Supabase storage');
   } catch (error: any) {
     console.warn('⚠️ Failed to delete old image (might not exist):', error.message);
     // Don't throw - deletion is best effort
@@ -298,19 +252,10 @@ export async function deleteImageFromStorage(imageUrl: string): Promise<void> {
 }
 
 /**
- * Test Firebase Storage connection
+ * Test Supabase Storage connection
  */
 export async function testStorageConnection(): Promise<boolean> {
-  try {
-    // Try to create a test reference
-    const testRef = ref(storage, 'test/connection-test');
-    // Just check if we can access storage - we don't need to upload anything
-    console.log('✅ Firebase Storage connection successful');
-    return true;
-  } catch (error: any) {
-    console.error('❌ Firebase Storage connection failed:', error);
-    return false;
-  }
+  return testSupabaseStorageConnection();
 }
 
 /**
@@ -399,18 +344,17 @@ export async function compressAndReuploadImage(
     const compressedSize = compressedFile.size;
     onProgress?.(70);
     
-    // Generate new filename with timestamp
-    const timestamp = Date.now();
+    // Generate new filename and upload compressed image to Supabase Storage
     const extension = compressedFile.name.split('.').pop() || 'jpg';
-    const newFileName = `products/${timestamp}_${productId}_compressed.${extension}`;
-    
-    // Upload compressed image to Firebase Storage
-    const storageRef = ref(storage, newFileName);
-    await uploadBytes(storageRef, compressedFile);
-    onProgress?.(90);
-    
-    // Get download URL
-    const newDownloadURL = await getDownloadURL(storageRef);
+    const newFileName = buildUploadPath(
+      'products',
+      `${productId}_compressed.${extension}`
+    );
+
+    const newDownloadURL = await uploadToSupabaseStorage(compressedFile, newFileName, {
+      contentType: compressedFile.type || 'image/jpeg',
+      upsert: true,
+    });
     onProgress?.(100);
     
     // Delete old image if requested
@@ -503,12 +447,19 @@ export async function compressProductImages(
 }
 
 /**
- * Checks if an image URL is from Firebase Storage
+ * Checks if an image URL is from Firebase Storage (legacy)
  */
 export function isFirebaseStorageUrl(url: string): boolean {
   return url.includes('firebasestorage.googleapis.com') || 
          url.includes('firebasestorage.app') ||
          url.includes('firebase');
+}
+
+/**
+ * Checks if an image URL is from Supabase Storage
+ */
+export function isSupabaseStorageUrl(url: string): boolean {
+  return url.includes('supabase.co/storage') || url.includes('/object/public/uploads/');
 }
 
 /**

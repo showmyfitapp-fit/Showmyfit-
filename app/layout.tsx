@@ -58,7 +58,9 @@ export default function RootLayout({
                 <link rel="preconnect" href="https://fonts.googleapis.com" />
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
                 <link rel="preconnect" href="https://images.unsplash.com" />
-                <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+                {process.env.NEXT_PUBLIC_SUPABASE_URL ? (
+                  <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
+                ) : null}
                 <link rel="shortcut icon" type="image/jpeg" href="/logo.jpg" />
                 <Script
                     id="ld-json-org"

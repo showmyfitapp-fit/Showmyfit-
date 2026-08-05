@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Upload, X, Image as ImageIcon, AlertCircle, CheckCircle, Wand2, Zap } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/firebase/config';
+import { buildUploadPath, uploadToSupabaseStorage } from '@/lib/supabase/storage';
 import { compressImageSmart } from '@/utils/imageCompression';
 
 interface ImageUploadProps {
@@ -99,22 +98,16 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       setCompressionProgress(0);
     }
 
-    // Create a unique filename
-    const timestamp = Date.now();
-    const fileName = `products/${timestamp}_${fileToUpload.name}`;
-    console.log('🖼️ ImageUpload: Uploading to path:', fileName);
-    
-    const storageRef = ref(storage, fileName);
+    const fileName = buildUploadPath(
+      'products',
+      fileToUpload instanceof File ? fileToUpload.name : 'image.jpg'
+    );
+    console.log('🖼️ ImageUpload: Uploading to Supabase path:', fileName);
 
     try {
-      // Upload file to Firebase Storage
-      console.log('🖼️ ImageUpload: Starting uploadBytes...');
-      const snapshot = await uploadBytes(storageRef, fileToUpload);
-      console.log('🖼️ ImageUpload: Upload completed, getting download URL...');
-      
-      // Get download URL
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('🖼️ ImageUpload: Got download URL:', downloadURL);
+      console.log('🖼️ ImageUpload: Starting Supabase upload...');
+      const downloadURL = await uploadToSupabaseStorage(fileToUpload, fileName);
+      console.log('🖼️ ImageUpload: Got public URL:', downloadURL);
       return downloadURL;
     } catch (error: any) {
       console.error('🖼️ ImageUpload: Upload failed:', error);

@@ -18,16 +18,13 @@ export const optimizeImageUrl = (url: string, width?: number, height?: number, q
     return `${baseUrl}?${params.toString()}`;
   }
   
-  // For Firebase Storage images, add optimization parameters
-  if (url.includes('firebasestorage.googleapis.com') || url.includes('firebasestorage.app')) {
-    const params = new URLSearchParams();
-    
-    if (width) params.append('w', width.toString());
-    if (height) params.append('h', height.toString());
-    params.append('q', quality.toString());
-    
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}${params.toString()}`;
+  // For Supabase / legacy Firebase Storage images, pass through (CDN already serves them)
+  if (
+    url.includes('supabase.co/storage') ||
+    url.includes('firebasestorage.googleapis.com') ||
+    url.includes('firebasestorage.app')
+  ) {
+    return url;
   }
   
   // For data URLs (placeholder images), return as is

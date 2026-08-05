@@ -3,15 +3,12 @@ import {
   createSupabaseServerClient,
   getSupabaseBrowserClient,
 } from './client';
+import { getPublicStorageUrl } from './storage';
 
 type JsonRecord = Record<string, any>;
 
 function storageUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return `${base}/storage/v1/object/public/uploads/${path
-    .split('/')
-    .map(encodeURIComponent)
-    .join('/')}`;
+  return getPublicStorageUrl(path);
 }
 
 export function resolveStorageImage(value: unknown): string {
@@ -26,17 +23,12 @@ export function resolveStorageImage(value: unknown): string {
 
   decoded = decoded.replace(/~/g, '_');
 
+  // Full URLs (Supabase public, legacy Firebase, etc.) are used as-is.
   if (decoded.startsWith('http')) {
-    const firebasePath = decoded.match(/\/o\/([^?]+)/)?.[1];
-    if (!firebasePath) return decoded;
-
-    try {
-      return storageUrl(decodeURIComponent(firebasePath).replace(/~/g, '_'));
-    } catch {
-      return decoded;
-    }
+    return decoded;
   }
 
+  // Bare storage paths resolve against the public uploads bucket.
   return storageUrl(decoded.replace(/^\/+/, ''));
 }
 
