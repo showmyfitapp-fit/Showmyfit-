@@ -473,9 +473,6 @@ const CategoriesPage: React.FC = () => {
                         src={category.image}
                         alt={category.name}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://via.placeholder.com/600x400';
-                        }}
                       />
 
                       {/* Gradient Overlay */}

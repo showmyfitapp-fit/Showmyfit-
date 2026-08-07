@@ -73,7 +73,7 @@ export const generateOGImage = (title: string, subtitle?: string): string => {
     theme: 'light'
   });
   
-  return `https://via.placeholder.com/1200x630/3B82F6/FFFFFF?text=${encodeURIComponent(title)}`;
+  return `https://placehold.co/1200x630/3B82F6/FFFFFF/png?text=${encodeURIComponent(title)}`;
 };
 
 export const generateTwitterImage = (title: string): string => {
@@ -84,7 +84,7 @@ export const generateTwitterImage = (title: string): string => {
     theme: 'light'
   });
   
-  return `https://via.placeholder.com/1200x600/3B82F6/FFFFFF?text=${encodeURIComponent(title)}`;
+  return `https://placehold.co/1200x600/3B82F6/FFFFFF/png?text=${encodeURIComponent(title)}`;
 };
 
 // Lazy loading utility

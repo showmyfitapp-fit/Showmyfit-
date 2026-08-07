@@ -643,7 +643,7 @@ const HomePage: React.FC = () => {
                     { name: 'SWEATS', offer: '40-70%', image: 'https://images.unsplash.com/photo-1521223890158-f9f7c3d5d504?w=300&h=300&fit=crop', category: 'sportswear' },
                     { name: 'SAREES', offer: 'MIN. 60% OFF*', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&h=300&fit=crop', category: 'women' },
                     { name: 'KIDS WESTERNWEAR', offer: 'MIN. 50% OFF*', image: 'https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=300&h=300&fit=crop', category: 'kids' },
-                    { name: 'KIDS ETHNICWEAR', offer: 'MIN. 50% OFF*', image: 'https://images.unsplash.com/photo-1515488042361-ee00e0dbc4ca?w=300&h=300&fit=crop', category: 'kids' },
+                    { name: 'KIDS ETHNICWEAR', offer: 'MIN. 50% OFF*', image: 'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?w=300&h=300&fit=crop', category: 'kids' },
                     { name: 'MATERNITY', offer: 'MIN 40%', image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&h=300&fit=crop', category: 'women' },
                   ].map((item, index) => (
                     <div
@@ -662,9 +662,6 @@ const HomePage: React.FC = () => {
                             src={item.image}
                             alt={item.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300';
-                            }}
                           />
                           {/* Overlay on hover */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -713,9 +710,6 @@ const HomePage: React.FC = () => {
                             src={item.image}
                             alt={item.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300';
-                            }}
                           />
                           {/* Overlay on hover */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>

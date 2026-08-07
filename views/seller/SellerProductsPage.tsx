@@ -395,7 +395,7 @@ const SellerProductsPage: React.FC = () => {
                   {/* Image Container */}
                   <div className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative">
                     <FastImage
-                      src={product.image || `https://via.placeholder.com/300x400`}
+                      src={product.image}
                       alt={product.name}
                       fill
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"

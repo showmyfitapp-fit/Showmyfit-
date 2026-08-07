@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import Image from 'next/image';
+import ImageFallback from './ImageFallback';
 
 interface OptimizedImageProps {
   src: string;
@@ -27,9 +28,20 @@ const OptimizedImage: React.FC<OptimizedImageProps> = memo(({
   onError,
   sizes = '100vw'
 }) => {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
   if (!src) return null;
 
   const isFill = !width && !height;
+
+  const handleError: React.ReactEventHandler<HTMLImageElement> = (event) => {
+    setHasError(true);
+    onError?.(event);
+  };
 
   const imageProps: any = {
     src,
@@ -37,7 +49,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = memo(({
     priority,
     loading: priority ? undefined : loading,
     onLoad,
-    onError,
+    onError: handleError,
     sizes,
     className: "object-cover transition-opacity duration-300"
   };
@@ -54,7 +66,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = memo(({
       className={`relative overflow-hidden ${className}`}
       style={isFill ? { width: '100%', height: '100%' } : { width, height }}
     >
-      <Image {...imageProps} />
+      {hasError ? <ImageFallback label={alt} /> : <Image {...imageProps} />}
     </div>
   );
 });

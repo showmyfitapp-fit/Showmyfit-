@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Store, Shield, Heart, ShoppingCart, Menu, User, TrendingUp, Package } from 'lucide-react';
-import Image from 'next/image';
+import FastImage from '../common/FastImage';
 import Sidebar from './Sidebar';
 import ShowMyFITLogo from '../common/ShowMyFITLogo';
 import { useAuth } from '@/contexts/AuthContext';
@@ -226,8 +226,8 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
                           className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors text-left group"
                         >
                           <div className="relative w-12 h-12 flex-shrink-0">
-                            <Image
-                              src={product.image || 'https://via.placeholder.com/50'}
+                            <FastImage
+                              src={product.image}
                               alt={product.name}
                               fill
                               className="rounded-lg object-cover bg-gray-100"
@@ -299,7 +299,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
               >
                 <div className="relative w-10 h-10 rounded-xl bg-neutral-100 text-neutral-600 flex items-center justify-center overflow-hidden border border-neutral-200 transition-transform group-hover:rotate-3 group-hover:scale-110">
                   {currentUser && currentUser.photoURL ? (
-                    <Image
+                    <FastImage
                       src={currentUser.photoURL}
                       alt="User"
                       fill

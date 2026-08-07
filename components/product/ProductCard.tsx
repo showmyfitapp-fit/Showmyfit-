@@ -62,7 +62,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       {/* Image Container */}
       <div className="relative aspect-square overflow-hidden bg-gray-50">
         <FastImage
-          src={product.image || 'https://via.placeholder.com/400x400?text=No+Image'}
+          src={product.image}
           alt={product.name}
           width={400}
           height={400}
