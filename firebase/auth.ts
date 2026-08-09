@@ -201,6 +201,30 @@ export async function signInWithFacebook() {
   return data;
 }
 
+/**
+ * Complete phone OTP login after the server verified MSG91 and minted tokens.
+ * Does not create a profile — the account must already exist.
+ */
+export async function loginWithPhoneOtpSession(
+  accessToken: string,
+  refreshToken: string
+) {
+  const client = getSupabaseBrowserClient();
+  const { data, error } = await client.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) throw error;
+  if (!data.user) throw new Error('OTP login did not return a user session');
+
+  const profile = await getUserData(data.user.id, data.user.email || undefined);
+  if (profile) {
+    await updateUserData(profile.uid, { lastLoginAt: new Date() });
+  }
+
+  return data;
+}
+
 export async function signOutUser(): Promise<void> {
   const { error } = await getSupabaseBrowserClient().auth.signOut();
   if (error) throw error;

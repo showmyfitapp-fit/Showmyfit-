@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, X, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import PhoneOtpLogin from '@/components/auth/PhoneOtpLogin';
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'reset';
+type LoginMethod = 'email' | 'otp';
 
 interface AuthPageProps {
   initialMode?: AuthMode;
@@ -22,6 +24,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     }
     return initialMode;
   });
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,6 +57,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
       setMode(modeFromUrl);
       setError('');
       setSuccess('');
+      if (modeFromUrl !== 'login') setLoginMethod('email');
     }
   }, [modeFromUrl]);
 
@@ -135,6 +139,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     setMode(next);
     setError('');
     setSuccess('');
+    setLoginMethod('email');
     setFormData((prev) => ({ ...prev, password: '', confirmPassword: '' }));
   };
 
@@ -165,7 +170,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
 
   const subtitle =
     mode === 'login'
-      ? 'Enter your details below.'
+      ? loginMethod === 'otp'
+        ? 'Sign in with your phone number.'
+        : 'Enter your details below.'
       : mode === 'signup'
         ? 'Start your journey with us today.'
         : mode === 'forgot'
@@ -183,6 +190,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
 
   const showSocial = mode === 'login' || mode === 'signup';
   const showPasswordField = mode === 'login' || mode === 'signup' || mode === 'reset';
+  const showOtpLogin = mode === 'login' && loginMethod === 'otp';
+  const showEmailForm = !showOtpLogin;
 
   return (
     <div className="min-h-screen bg-white">
@@ -222,12 +231,55 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
               <div className="relative flex items-center justify-center">
                 <div className="absolute inset-0 border-t border-gray-100"></div>
                 <span className="relative bg-white px-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
-                  Or with email
+                  {showOtpLogin ? 'Or with phone' : 'Or with email'}
                 </span>
               </div>
             </>
           )}
 
+          {mode === 'login' && (
+            <div className="grid grid-cols-2 gap-2 p-1 bg-gray-50 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMethod('email');
+                  setError('');
+                  setSuccess('');
+                }}
+                className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                  loginMethod === 'email'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMethod('otp');
+                  setError('');
+                  setSuccess('');
+                }}
+                className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                  loginMethod === 'otp'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Login with OTP
+              </button>
+            </div>
+          )}
+
+          {showOtpLogin ? (
+            <PhoneOtpLogin
+              onSuccess={() => router.push('/profile')}
+              onNeedSignup={() => switchMode('signup')}
+            />
+          ) : null}
+
+          {showEmailForm && (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-4 bg-red-50 text-red-600 text-sm rounded-xl font-medium text-center">
@@ -314,6 +366,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
               )}
             </button>
           </form>
+          )}
 
           {(mode === 'login' || mode === 'signup') && (
             <p className="text-center text-sm font-medium text-gray-500">

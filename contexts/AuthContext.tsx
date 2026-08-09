@@ -11,6 +11,7 @@ import React, {
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   getUserData,
+  loginWithPhoneOtpSession,
   resetPassword as resetSupabasePassword,
   signIn as supabaseSignIn,
   signInWithFacebook,
@@ -48,6 +49,10 @@ interface AuthContextType {
   refreshUserData: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
+  loginWithPhoneOtp: (
+    accessToken: string,
+    refreshToken: string
+  ) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -139,6 +144,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await signInWithFacebook();
   };
 
+  const loginWithPhoneOtp = async (
+    accessToken: string,
+    refreshToken: string
+  ) => loginWithPhoneOtpSession(accessToken, refreshToken);
+
   const value: AuthContextType = {
     currentUser,
     userData,
@@ -154,6 +164,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshUserData,
     loginWithGoogle,
     loginWithFacebook,
+    loginWithPhoneOtp,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
