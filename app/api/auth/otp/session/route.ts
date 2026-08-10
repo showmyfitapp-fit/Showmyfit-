@@ -3,6 +3,7 @@ import {
   phoneLookupVariants,
   toCanonicalIndiaPhone,
 } from '@/lib/auth/phone';
+import { msg91VerifyOtp } from '@/lib/msg91/server';
 import {
   phonesMatch,
   verifyMsg91AccessToken,
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const phoneInput = String(body?.phone || '');
-    const accessToken = String(body?.accessToken || '');
+    let accessToken = String(body?.accessToken || '');
+    const reqId = String(body?.reqId || '');
+    const otp = String(body?.otp || '');
 
     const phone = toCanonicalIndiaPhone(phoneInput);
     if (!phone) {
@@ -106,9 +109,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Prefer server-side MSG91 verify (authkey) when client sends reqId + otp.
+    if (!accessToken && reqId && otp) {
+      const verifiedOtp = await msg91VerifyOtp(reqId, otp);
+      accessToken = verifiedOtp.accessToken;
+    }
+
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Missing MSG91 access token', code: 'missing_token' },
+        { error: 'Missing OTP verification details', code: 'missing_token' },
         { status: 400 }
       );
     }

@@ -5,12 +5,6 @@ import { ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import OtpInput from '@/components/auth/OtpInput';
 import { toCanonicalIndiaPhone } from '@/lib/auth/phone';
-import {
-  initMsg91OtpWidget,
-  retryOtp,
-  sendOtp,
-  verifyOtp,
-} from '@/lib/msg91/otp-widget';
 
 interface PhoneOtpLoginProps {
   onSuccess: () => void;
@@ -19,6 +13,15 @@ interface PhoneOtpLoginProps {
 
 const RESEND_COOLDOWN_SECONDS = 10;
 const MAX_RESENDS = 2;
+
+async function readApiError(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => ({}));
+  return {
+    message: (payload?.error as string) || fallback,
+    code: payload?.code as string | undefined,
+    payload,
+  };
+}
 
 const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
   onSuccess,
@@ -35,12 +38,6 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
   const [resendAfter, setResendAfter] = useState(0);
   const [resendCount, setResendCount] = useState(0);
   const [phoneNotRegistered, setPhoneNotRegistered] = useState(false);
-
-  useEffect(() => {
-    void initMsg91OtpWidget().catch(() => {
-      // Env may be missing in local setups; send will surface a clear error.
-    });
-  }, []);
 
   useEffect(() => {
     if (resendAfter <= 0) return;
@@ -66,8 +63,15 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
 
     setLoading(true);
     try {
-      const result = await sendOtp(canonical);
-      setReqId(result.reqId);
+      const response = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: canonical }),
+      });
+      const result = await readApiError(response, 'Failed to send OTP');
+      if (!response.ok) throw new Error(result.message);
+
+      setReqId(String(result.payload.reqId || ''));
       setPhone(nationalDigits);
       setOtp('');
       setStep('otp');
@@ -87,7 +91,14 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
     setSuccess('');
     setLoading(true);
     try {
-      await retryOtp(reqId);
+      const response = await fetch('/api/auth/otp/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reqId }),
+      });
+      const result = await readApiError(response, 'Failed to resend OTP');
+      if (!response.ok) throw new Error(result.message);
+
       setResendCount((c) => c + 1);
       setResendAfter(RESEND_COOLDOWN_SECONDS);
       setSuccess('OTP resent.');
@@ -111,27 +122,29 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
 
     setLoading(true);
     try {
-      const { accessToken } = await verifyOtp(reqId, otp);
       const canonical = toCanonicalIndiaPhone(nationalDigits);
       if (!canonical) throw new Error('Invalid phone number');
 
       const response = await fetch('/api/auth/otp/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: canonical, accessToken }),
+        body: JSON.stringify({ phone: canonical, reqId, otp }),
       });
 
-      const payload = await response.json().catch(() => ({}));
+      const result = await readApiError(response, 'OTP login failed');
       if (!response.ok) {
-        if (payload?.code === 'phone_not_registered') {
+        if (result.code === 'phone_not_registered') {
           setPhoneNotRegistered(true);
-          setError(payload.error || 'No account found for this phone number.');
+          setError(result.message);
           return;
         }
-        throw new Error(payload?.error || 'OTP login failed');
+        throw new Error(result.message);
       }
 
-      await loginWithPhoneOtp(payload.access_token, payload.refresh_token);
+      await loginWithPhoneOtp(
+        result.payload.access_token,
+        result.payload.refresh_token
+      );
       onSuccess();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'OTP verification failed');
