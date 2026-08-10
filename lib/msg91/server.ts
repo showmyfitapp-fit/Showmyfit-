@@ -54,30 +54,50 @@ function extractStringField(
   return '';
 }
 
+function formatMsg91Error(message: string, fallback: string): Error {
+  const normalized = message.trim().toLowerCase();
+
+  if (
+    normalized === 'invalid request' ||
+    normalized === 'invalid_request' ||
+    normalized.includes('invalid request')
+  ) {
+    return new Error(
+      'MSG91 Invalid Request: your widget allows India only, but this server request comes from a non-India IP (common on Vercel). Keep send/verify on the browser widget, or set Country Restriction to Allow All in MSG91 widget settings.'
+    );
+  }
+
+  if (
+    normalized === 'authenticationfailure' ||
+    normalized === 'authentication failure' ||
+    normalized.includes('authentication')
+  ) {
+    return new Error(
+      'MSG91 AuthenticationFailure: ensure the OTP Widget token is Enabled in MSG91 → Tokens, selected in the widget Client Side Integration, and matches NEXT_PUBLIC_MSG91_AUTH_TOKEN / MSG91_WIDGET_TOKEN.'
+    );
+  }
+
+  return new Error(message || fallback);
+}
+
 function assertMsg91Success(response: Msg91ApiResponse, fallback: string) {
   const type = typeof response.type === 'string' ? response.type.toLowerCase() : '';
   const message =
-    typeof response.message === 'string'
-      ? response.message.trim()
-      : '';
+    typeof response.message === 'string' ? response.message.trim() : '';
 
-  const isAuthFailure =
-    message.toLowerCase() === 'authenticationfailure' ||
-    message.toLowerCase() === 'authentication failure';
-
-  if (type === 'error' || isAuthFailure) {
-    if (isAuthFailure) {
-      throw new Error(
-        'MSG91 AuthenticationFailure: check MSG91_AUTH_KEY and widget token in env, ensure the token is Enabled in MSG91 → Tokens, and that your IP is not blocked under token IP settings.'
-      );
-    }
-    throw new Error(message || fallback);
+  if (type === 'error' || message.toLowerCase() === 'invalid request') {
+    throw formatMsg91Error(message, fallback);
   }
 }
 
+/**
+ * Widget send/verify APIs expect the OTP Widget tokenAuth (not account authkey).
+ * Do not send both — MSG91 can return "Invalid Request".
+ */
 async function msg91WidgetPost(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  mode: 'token' | 'authkey' = 'token'
 ): Promise<Msg91ApiResponse> {
   const { widgetId, authkey, tokenAuth } = getWidgetConfig();
 
@@ -86,18 +106,21 @@ async function msg91WidgetPost(
     ...body,
   };
 
-  // Prefer account authkey for server-side widget APIs; fall back to widget token.
-  if (authkey) payload.authkey = authkey;
-  if (tokenAuth) payload.tokenAuth = tokenAuth;
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
-  if (authkey) headers.authkey = authkey;
-  if (tokenAuth) {
+
+  if (mode === 'token') {
+    if (!tokenAuth) {
+      throw new Error('Missing MSG91 widget token (MSG91_WIDGET_TOKEN / NEXT_PUBLIC_MSG91_AUTH_TOKEN)');
+    }
+    payload.tokenAuth = tokenAuth;
     headers.tokenauth = tokenAuth;
-    headers.tokenAuth = tokenAuth;
+  } else {
+    if (!authkey) throw new Error('Missing MSG91_AUTH_KEY');
+    payload.authkey = authkey;
+    headers.authkey = authkey;
   }
 
   const response = await fetch(`${MSG91_WIDGET_BASE}${path}`, {
@@ -108,19 +131,14 @@ async function msg91WidgetPost(
   });
 
   const raw = (await response.json().catch(() => ({}))) as Msg91ApiResponse;
+  const message =
+    typeof raw.message === 'string' ? raw.message : `MSG91 ${path} failed`;
 
   if (!response.ok) {
-    const message =
-      typeof raw.message === 'string' ? raw.message : `MSG91 ${path} failed`;
-    if (message.toLowerCase().includes('authentication')) {
-      throw new Error(
-        'MSG91 AuthenticationFailure: use a valid Enabled OTP Widget token / authkey in env, and unblock your IP under MSG91 → Tokens → IP settings.'
-      );
-    }
-    throw new Error(message);
+    throw formatMsg91Error(message, `MSG91 ${path} failed`);
   }
 
-  assertMsg91Success(raw, `MSG91 ${path} failed`);
+  assertMsg91Success(raw, message);
   return raw;
 }
 
@@ -131,7 +149,8 @@ export async function msg91SendOtp(phoneInput: string): Promise<{ reqId: string 
     throw new Error('Enter a valid 10-digit Indian mobile number');
   }
 
-  const raw = await msg91WidgetPost('/sendOtp', { identifier });
+  // Widget APIs authenticate with tokenAuth only.
+  const raw = await msg91WidgetPost('/sendOtp', { identifier }, 'token');
   const reqId = extractStringField(raw, ['message', 'reqId']);
   if (!reqId) throw new Error('MSG91 did not return a request id');
   return { reqId };
@@ -139,10 +158,14 @@ export async function msg91SendOtp(phoneInput: string): Promise<{ reqId: string 
 
 export async function msg91RetryOtp(reqId: string): Promise<void> {
   if (!reqId) throw new Error('Missing OTP request id');
-  await msg91WidgetPost('/retryOtp', {
-    reqId,
-    retryChannel: 11, // SMS
-  });
+  await msg91WidgetPost(
+    '/retryOtp',
+    {
+      reqId,
+      retryChannel: 11, // SMS
+    },
+    'token'
+  );
 }
 
 export async function msg91VerifyOtp(
@@ -153,10 +176,14 @@ export async function msg91VerifyOtp(
   const cleaned = String(otp || '').replace(/\D/g, '');
   if (cleaned.length !== 4) throw new Error('Enter the 4-digit OTP');
 
-  const raw = await msg91WidgetPost('/verifyOtp', {
-    reqId,
-    otp: cleaned,
-  });
+  const raw = await msg91WidgetPost(
+    '/verifyOtp',
+    {
+      reqId,
+      otp: cleaned,
+    },
+    'token'
+  );
 
   const accessToken = extractStringField(raw, ['message', 'accessToken', 'token']);
   if (!accessToken) throw new Error('MSG91 did not return an access token');

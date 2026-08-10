@@ -1,26 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { toCanonicalIndiaPhone } from '@/lib/auth/phone';
-import { msg91SendOtp } from '@/lib/msg91/server';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const phone = toCanonicalIndiaPhone(String(body?.phone || ''));
-    if (!phone) {
-      return NextResponse.json(
-        { error: 'Enter a valid 10-digit Indian mobile number', code: 'invalid_phone' },
-        { status: 400 }
-      );
-    }
-
-    const { reqId } = await msg91SendOtp(phone);
-    return NextResponse.json({ reqId, phone });
-  } catch (error: unknown) {
-    console.error('OTP send error:', error);
-    const message =
-      error instanceof Error ? error.message : 'Failed to send OTP';
-    return NextResponse.json({ error: message, code: 'otp_send_failed' }, { status: 500 });
-  }
+/**
+ * Server-side MSG91 send is disabled for this widget.
+ * The widget is India-only; Vercel/server IPs get MSG91 "Invalid Request".
+ * OTP send/verify runs in the browser via the MSG91 widget SDK.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        'OTP send must run in the browser (MSG91 India-only widget). Refresh /login and use Login with OTP — do not call /api/auth/otp/send from the server.',
+      code: 'use_browser_widget',
+    },
+    { status: 400 }
+  );
 }

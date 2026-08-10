@@ -5,6 +5,12 @@ import { ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import OtpInput from '@/components/auth/OtpInput';
 import { toCanonicalIndiaPhone } from '@/lib/auth/phone';
+import {
+  initMsg91OtpWidget,
+  retryOtp,
+  sendOtp,
+  verifyOtp,
+} from '@/lib/msg91/otp-widget';
 
 interface PhoneOtpLoginProps {
   onSuccess: () => void;
@@ -13,15 +19,6 @@ interface PhoneOtpLoginProps {
 
 const RESEND_COOLDOWN_SECONDS = 10;
 const MAX_RESENDS = 2;
-
-async function readApiError(response: Response, fallback: string) {
-  const payload = await response.json().catch(() => ({}));
-  return {
-    message: (payload?.error as string) || fallback,
-    code: payload?.code as string | undefined,
-    payload,
-  };
-}
 
 const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
   onSuccess,
@@ -38,6 +35,12 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
   const [resendAfter, setResendAfter] = useState(0);
   const [resendCount, setResendCount] = useState(0);
   const [phoneNotRegistered, setPhoneNotRegistered] = useState(false);
+
+  useEffect(() => {
+    void initMsg91OtpWidget().catch((err: unknown) => {
+      console.error('MSG91 widget init failed:', err);
+    });
+  }, []);
 
   useEffect(() => {
     if (resendAfter <= 0) return;
@@ -63,15 +66,9 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
 
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: canonical }),
-      });
-      const result = await readApiError(response, 'Failed to send OTP');
-      if (!response.ok) throw new Error(result.message);
-
-      setReqId(String(result.payload.reqId || ''));
+      // Must run in the browser: MSG91 widget is India-only, and Vercel server IPs are rejected as "Invalid Request".
+      const result = await sendOtp(canonical);
+      setReqId(result.reqId);
       setPhone(nationalDigits);
       setOtp('');
       setStep('otp');
@@ -91,14 +88,7 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
     setSuccess('');
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/otp/retry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reqId }),
-      });
-      const result = await readApiError(response, 'Failed to resend OTP');
-      if (!response.ok) throw new Error(result.message);
-
+      await retryOtp(reqId);
       setResendCount((c) => c + 1);
       setResendAfter(RESEND_COOLDOWN_SECONDS);
       setSuccess('OTP resent.');
@@ -122,32 +112,38 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
 
     setLoading(true);
     try {
+      const { accessToken } = await verifyOtp(reqId, otp);
       const canonical = toCanonicalIndiaPhone(nationalDigits);
       if (!canonical) throw new Error('Invalid phone number');
 
       const response = await fetch('/api/auth/otp/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: canonical, reqId, otp }),
+        body: JSON.stringify({ phone: canonical, accessToken }),
       });
 
-      const result = await readApiError(response, 'OTP login failed');
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (result.code === 'phone_not_registered') {
+        if (payload?.code === 'phone_not_registered') {
           setPhoneNotRegistered(true);
-          setError(result.message);
+          setError(payload.error || 'No account found for this phone number.');
           return;
         }
-        throw new Error(result.message);
+        throw new Error(payload?.error || 'OTP login failed');
       }
 
-      await loginWithPhoneOtp(
-        result.payload.access_token,
-        result.payload.refresh_token
-      );
+      await loginWithPhoneOtp(payload.access_token, payload.refresh_token);
       onSuccess();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'OTP verification failed');
+      const message =
+        err instanceof Error ? err.message : 'OTP verification failed';
+      if (/authenticationfailure/i.test(message)) {
+        setError(
+          'MSG91 AuthenticationFailure: enable the OTP Widget token in MSG91 → Tokens, select it in Client Side Integration, and make sure NEXT_PUBLIC_MSG91_AUTH_TOKEN matches that token.'
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
