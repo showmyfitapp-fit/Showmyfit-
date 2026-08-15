@@ -135,15 +135,7 @@ const PhoneOtpLogin: React.FC<PhoneOtpLoginProps> = ({
       await loginWithPhoneOtp(payload.access_token, payload.refresh_token);
       onSuccess();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'OTP verification failed';
-      if (/authenticationfailure/i.test(message)) {
-        setError(
-          'MSG91 AuthenticationFailure: enable the OTP Widget token in MSG91 → Tokens, select it in Client Side Integration, and make sure NEXT_PUBLIC_MSG91_AUTH_TOKEN matches that token.'
-        );
-      } else {
-        setError(message);
-      }
+      setError(err instanceof Error ? err.message : 'OTP verification failed');
     } finally {
       setLoading(false);
     }

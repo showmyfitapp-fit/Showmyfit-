@@ -150,11 +150,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       access_token: session.access_token,
       refresh_token: session.refresh_token,
+      msg91_verified_by: verified.verifiedBy,
     });
   } catch (error: unknown) {
     console.error('OTP session error:', error);
     const message =
       error instanceof Error ? error.message : 'Failed to complete OTP login';
-    return NextResponse.json({ error: message, code: 'otp_session_failed' }, { status: 500 });
+    const code = /not whitelisted|418/i.test(message)
+      ? 'msg91_ip_blocked'
+      : /no account found/i.test(message)
+        ? 'phone_not_registered'
+        : 'otp_session_failed';
+    return NextResponse.json({ error: message, code }, { status: 500 });
   }
 }
