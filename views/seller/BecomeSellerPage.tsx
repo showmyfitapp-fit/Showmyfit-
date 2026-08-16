@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,6 +13,7 @@ import Button from '@/components/ui/Button';
 import GoogleMapLocation from '@/components/common/GoogleMapLocation';
 import { useAuth } from '@/contexts/AuthContext';
 import { submitSellerApplication, getSellerApplicationStatus } from '@/firebase/auth';
+import SelectDropdown from '@/components/ui/SelectDropdown';
 
 const BecomeSellerPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
@@ -26,13 +27,6 @@ const BecomeSellerPage: React.FC = () => {
   const [applicationStatus, setApplicationStatus] = useState<'not_applied' | 'pending' | 'approved' | 'rejected'>('not_applied');
   const [checkingStatus, setCheckingStatus] = useState(true);
 
-  // Dropdown states
-  const [businessTypeDropdownOpen, setBusinessTypeDropdownOpen] = useState(false);
-  const [yearsDropdownOpen, setYearsDropdownOpen] = useState(false);
-
-  // Refs for dropdowns
-  const businessTypeDropdownRef = useRef<HTMLDivElement>(null);
-  const yearsDropdownRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     // Business Information
     businessName: '',
@@ -85,23 +79,6 @@ const BecomeSellerPage: React.FC = () => {
       // Don't redirect immediately, show login prompt instead
     }
   }, [currentUser, loading]);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (businessTypeDropdownRef.current && !businessTypeDropdownRef.current.contains(event.target as Node)) {
-        setBusinessTypeDropdownOpen(false);
-      }
-      if (yearsDropdownRef.current && !yearsDropdownRef.current.contains(event.target as Node)) {
-        setYearsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   const businessTypes = [
     'Fashion & Apparel 👕',
@@ -563,46 +540,15 @@ const BecomeSellerPage: React.FC = () => {
                     </div>
                     <div>
                       <label htmlFor="businessType" className="block text-sm font-semibold text-gray-700 mb-3">Business Type *</label>
-                      <div className="relative" ref={businessTypeDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => setBusinessTypeDropdownOpen(!businessTypeDropdownOpen)}
-                          className={`w-full px-4 py-3.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between transition-all ${businessTypeDropdownOpen
-                            ? 'border-blue-500 ring-2 ring-blue-500'
-                            : 'border-gray-300 hover:border-gray-400'
-                            } ${formData.businessType ? 'text-gray-900 font-medium' : 'text-gray-500'}`}
-                        >
-                          <span>{formData.businessType || 'Choose your business type...'}</span>
-                          <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${businessTypeDropdownOpen ? 'rotate-180' : ''
-                              }`}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        {businessTypeDropdownOpen && (
-                          <div className="absolute z-50 w-full mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                            {businessTypes.map(type => (
-                              <button
-                                key={type}
-                                type="button"
-                                onClick={() => {
-                                  setFormData({ ...formData, businessType: type });
-                                  setBusinessTypeDropdownOpen(false);
-                                }}
-                                className={`w-full px-4 py-3 text-left hover:bg-blue-50 focus:bg-blue-50 focus:outline-none transition-colors duration-150 border-b border-gray-100 last:border-b-0 ${formData.businessType === type ? 'bg-blue-50 font-semibold text-blue-700' : 'text-gray-900'
-                                  }`}
-                              >
-                                {type}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <SelectDropdown
+                        id="businessType"
+                        value={formData.businessType}
+                        onChange={(value) => setFormData({ ...formData, businessType: value })}
+                        placeholder="Choose your business type..."
+                        options={businessTypes.map((type) => ({ value: type, label: type }))}
+                        buttonClassName="py-3.5 border-2"
+                        menuClassName="border-2"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-semibold text-gray-700 mb-2.5">Business Description</label>
@@ -725,46 +671,18 @@ const BecomeSellerPage: React.FC = () => {
                   <div className="grid md:grid-cols-1 gap-6">
                     <div>
                       <label htmlFor="yearsInBusiness" className="block text-sm font-semibold text-gray-700 mb-3">Years in Business</label>
-                      <div className="relative" ref={yearsDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => setYearsDropdownOpen(!yearsDropdownOpen)}
-                          className={`w-full px-4 py-3.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between transition-all ${yearsDropdownOpen
-                            ? 'border-blue-500 ring-2 ring-blue-500'
-                            : 'border-gray-300 hover:border-gray-400'
-                            } ${formData.yearsInBusiness ? 'text-gray-900 font-medium' : 'text-gray-500'}`}
-                        >
-                          <span>{formData.yearsInBusiness || 'Select years...'}</span>
-                          <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${yearsDropdownOpen ? 'rotate-180' : ''
-                              }`}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        {yearsDropdownOpen && (
-                          <div className="absolute z-50 w-full mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                            {['0-1', '1-3', '3-5', '5-10', '10+'].map((years) => (
-                              <button
-                                key={years}
-                                type="button"
-                                onClick={() => {
-                                  setFormData({ ...formData, yearsInBusiness: years });
-                                  setYearsDropdownOpen(false);
-                                }}
-                                className={`w-full px-4 py-3 text-left hover:bg-blue-50 focus:bg-blue-50 focus:outline-none transition-colors duration-150 border-b border-gray-100 last:border-b-0 ${formData.yearsInBusiness === years ? 'bg-blue-50 font-semibold text-blue-700' : 'text-gray-900'
-                                  }`}
-                              >
-                                {years} {years === '10+' ? '' : 'years'}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <SelectDropdown
+                        id="yearsInBusiness"
+                        value={formData.yearsInBusiness}
+                        onChange={(value) => setFormData({ ...formData, yearsInBusiness: value })}
+                        placeholder="Select years..."
+                        options={['0-1', '1-3', '3-5', '5-10', '10+'].map((years) => ({
+                          value: years,
+                          label: years === '10+' ? years : `${years} years`,
+                        }))}
+                        buttonClassName="py-3.5 border-2"
+                        menuClassName="border-2"
+                      />
                     </div>
                   </div>
                 </div>

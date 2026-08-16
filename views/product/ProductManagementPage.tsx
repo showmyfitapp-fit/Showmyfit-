@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Package, Plus, Edit, Trash2, Search, Filter, Star,
@@ -16,6 +16,7 @@ import {
   saveProduct,
 } from '@/lib/supabase/admin';
 import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
+import SelectDropdown from '@/components/ui/SelectDropdown';
 import { useCategories } from '@/hooks/useCategories';
 import { formatCategoryName } from '@/lib/categories/format';
 import { buildProductSeoFields } from '@/utils/productSeo';
@@ -79,8 +80,6 @@ const ProductManagementPage: React.FC = () => {
   });
 
   const [categorySpecificData, setCategorySpecificData] = useState<Record<string, any>>({});
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const { topLevel: topLevelCategories } = useCategories();
 
   const statusOptions = [
@@ -182,20 +181,6 @@ const ProductManagementPage: React.FC = () => {
         return {};
     }
   };
-
-  // Handle click outside dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
-        setStatusDropdownOpen(false);
-      }
-    };
-
-    if (statusDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [statusDropdownOpen]);
 
   // Load products
   const loadProducts = async () => {
@@ -386,7 +371,7 @@ const ProductManagementPage: React.FC = () => {
 
             {/* Add/Edit Product Form */}
             {showAddForm && (
-              <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+              <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-8 mb-8">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold text-gray-900">
                     {editingProduct ? 'Edit Product' : 'Add New Product'}
@@ -733,56 +718,24 @@ const ProductManagementPage: React.FC = () => {
                       <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
                         Status
                       </label>
-                      <div className="relative" ref={statusDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white text-left flex items-center justify-between hover:border-gray-400 transition-colors duration-200"
-                        >
-                          <span className="flex items-center space-x-2">
-                            {formData.status ? (
-                              <>
-                                <span className="text-lg">
-                                  {statusOptions.find(s => s.value === formData.status)?.icon}
-                                </span>
-                                <span className={`font-medium ${statusOptions.find(s => s.value === formData.status)?.color}`}>
-                                  {statusOptions.find(s => s.value === formData.status)?.label}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-gray-500">Select Status</span>
-                            )}
-                          </span>
-                          <svg
-                            className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${statusDropdownOpen ? 'rotate-180' : ''
-                              }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-
-                        {statusDropdownOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
-                            {statusOptions.map(status => (
-                              <button
-                                key={status.value}
-                                type="button"
-                                onClick={() => {
-                                  setFormData({ ...formData, status: status.value as 'active' | 'inactive' | 'draft' });
-                                  setStatusDropdownOpen(false);
-                                }}
-                                className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none flex items-center space-x-3 transition-colors duration-150"
-                              >
-                                <span className="text-lg">{status.icon}</span>
-                                <span className={`font-medium ${status.color}`}>{status.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <SelectDropdown
+                        id="status"
+                        value={formData.status}
+                        onChange={(value) =>
+                          setFormData({ ...formData, status: value as 'active' | 'inactive' | 'draft' })
+                        }
+                        placeholder="Select Status"
+                        options={statusOptions.map((status) => ({
+                          value: status.value,
+                          label: (
+                            <span className="flex items-center space-x-2">
+                              <span className="text-lg">{status.icon}</span>
+                              <span className={`font-medium ${status.color}`}>{status.label}</span>
+                            </span>
+                          ),
+                        }))}
+                        buttonClassName="focus:ring-red-500"
+                      />
                     </div>
                   </div>
 
@@ -801,17 +754,16 @@ const ProductManagementPage: React.FC = () => {
                               {field.label}
                             </label>
                             {field.type === 'select' ? (
-                              <select
+                              <SelectDropdown
                                 id={`category-${key}`}
                                 value={categorySpecificData[key] || ''}
-                                onChange={(e) => setCategorySpecificData({ ...categorySpecificData, [key]: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              >
-                                <option value="">Select {field.label}</option>
-                                {field.options.map((option: string) => (
-                                  <option key={option} value={option}>{option}</option>
-                                ))}
-                              </select>
+                                onChange={(value) => setCategorySpecificData({ ...categorySpecificData, [key]: value })}
+                                placeholder={`Select ${field.label}`}
+                                options={(field.options || []).map((option: string) => ({
+                                  value: option,
+                                  label: option,
+                                }))}
+                              />
                             ) : field.type === 'number' ? (
                               <input
                                 id={`category-${key}`}

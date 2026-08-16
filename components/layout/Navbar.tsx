@@ -154,7 +154,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
   // Don't render if auth is still loading (simple skeleton)
   if (loading) {
     return (
-      <nav className="fixed top-0 left-0 right-0 bg-white z-40 border-b border-gray-100 h-20 flex items-center px-6">
+      <nav className="sticky top-0 left-0 right-0 bg-white z-40 border-b border-gray-100 h-[var(--navbar-h)] flex items-center px-6">
         <div className="w-8 h-8 bg-gray-100 rounded-lg animate-pulse mr-4"></div>
         <div className="w-32 h-8 bg-gray-100 rounded-lg animate-pulse"></div>
       </nav>
@@ -325,14 +325,14 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
 
           {/* Mobile Search Bar - Tighter spacing */}
           <div className="md:hidden pb-3">
-            <form onSubmit={handleSearch} className="relative">
+            <form onSubmit={handleSearch} className="relative h-10">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchInputChange}
                 placeholder="Search brands..."
-                className="w-full pl-11 pr-4 py-3 bg-neutral-100/50 border border-neutral-100 rounded-2xl text-[11px] font-black uppercase tracking-widest focus:bg-white transition-all outline-none"
+                className="w-full h-10 pl-11 pr-4 bg-neutral-100/50 border border-neutral-100 rounded-2xl text-[11px] font-black uppercase tracking-widest focus:bg-white transition-all outline-none"
               />
             </form>
             {/* Mobile Suggestions would go here in a real implementation or fullscreen overlay */}

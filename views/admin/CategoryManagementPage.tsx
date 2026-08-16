@@ -295,7 +295,7 @@ const CategoryManagementPage: React.FC = () => {
                     <select
                       value={form.parentSlug}
                       onChange={(e) => setForm({ ...form, parentSlug: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg"
+                      className="w-full max-w-full px-3 py-2 text-base bg-white border rounded-lg"
                       disabled={Boolean(form.id)}
                     >
                       <option value="">Top-level category</option>

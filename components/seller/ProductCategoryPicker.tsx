@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { useCategories } from '@/hooks/useCategories';
+import { useFixedMenu } from '@/hooks/useFixedMenu';
 
 interface ProductCategoryPickerProps {
   category: string;
@@ -24,6 +25,11 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
   const { topLevel, getSubcategories, loading, error } = useCategories();
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [subcategoryOpen, setSubcategoryOpen] = useState(false);
+
+  const closeCategory = useCallback(() => setCategoryOpen(false), []);
+  const closeSubcategory = useCallback(() => setSubcategoryOpen(false), []);
+  const categoryMenu = useFixedMenu(categoryOpen, closeCategory);
+  const subcategoryMenu = useFixedMenu(subcategoryOpen, closeSubcategory);
 
   const selectedCategory = useMemo(
     () => topLevel.find((c) => c.slug === category),
@@ -59,28 +65,36 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Category {required && <span className="text-red-500">*</span>}
         </label>
-        <div className="relative">
+        <div ref={categoryMenu.rootRef} className="relative">
           <button
+            ref={categoryMenu.triggerRef}
             type="button"
-            onClick={() => setCategoryOpen(!categoryOpen)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onClick={() => {
+              setSubcategoryOpen(false);
+              if (!categoryOpen) categoryMenu.sync();
+              setCategoryOpen((open) => !open);
+            }}
+            className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 min-w-0">
               {selectedCategory ? (
                 <>
                   <span className="text-lg">{selectedCategory.icon}</span>
-                  <span className="text-gray-900">{selectedCategory.name}</span>
+                  <span className="text-gray-900 truncate">{selectedCategory.name}</span>
                 </>
               ) : (
                 <span className="text-gray-500">Select category</span>
               )}
             </span>
             <ChevronDown
-              className={`w-5 h-5 text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${categoryOpen ? 'rotate-180' : ''}`}
             />
           </button>
           {categoryOpen && (
-            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            <div
+              className="bg-white border border-gray-300 rounded-lg shadow-lg overflow-y-auto"
+              style={categoryMenu.menuStyle}
+            >
               {topLevel.map((item) => (
                 <button
                   key={item.slug}
@@ -90,7 +104,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
                     onSubcategoryChange('', '');
                     setCategoryOpen(false);
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 ${
+                  className={`w-full px-4 py-3 text-left text-base hover:bg-gray-50 flex items-center gap-3 ${
                     category === item.slug ? 'bg-blue-50' : ''
                   }`}
                 >
@@ -108,23 +122,31 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Subcategory {required && <span className="text-red-500">*</span>}
           </label>
-          <div className="relative">
+          <div ref={subcategoryMenu.rootRef} className="relative">
             <button
+              ref={subcategoryMenu.triggerRef}
               type="button"
-              onClick={() => setSubcategoryOpen(!subcategoryOpen)}
+              onClick={() => {
+                setCategoryOpen(false);
+                if (!subcategoryOpen) subcategoryMenu.sync();
+                setSubcategoryOpen((open) => !open);
+              }}
               disabled={subcategories.length === 0}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
             >
-              <span className={selectedSubcategory ? 'text-gray-900' : 'text-gray-500'}>
+              <span className={`truncate ${selectedSubcategory ? 'text-gray-900' : 'text-gray-500'}`}>
                 {selectedSubcategory?.name ||
                   (subcategories.length === 0 ? 'No subcategories available' : 'Select subcategory')}
               </span>
               <ChevronDown
-                className={`w-5 h-5 text-gray-400 transition-transform ${subcategoryOpen ? 'rotate-180' : ''}`}
+                className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${subcategoryOpen ? 'rotate-180' : ''}`}
               />
             </button>
             {subcategoryOpen && subcategories.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              <div
+                className="bg-white border border-gray-300 rounded-lg shadow-lg overflow-y-auto"
+                style={subcategoryMenu.menuStyle}
+              >
                 {subcategories.map((item) => (
                   <button
                     key={item.slug}
@@ -133,7 +155,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
                       onSubcategoryChange(item.slug, item.name);
                       setSubcategoryOpen(false);
                     }}
-                    className={`w-full px-4 py-3 text-left hover:bg-gray-50 ${
+                    className={`w-full px-4 py-3 text-left text-base hover:bg-gray-50 ${
                       subcategory === item.slug ? 'bg-blue-50 font-medium' : ''
                     }`}
                   >

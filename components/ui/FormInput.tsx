@@ -23,7 +23,7 @@ const FormInput: React.FC<FormInputProps> = ({
   options,
   className = ''
 }) => {
-  const baseInputClasses = `w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${className}`;
+  const baseInputClasses = `w-full max-w-full px-4 py-3 text-base bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${className}`;
 
   const renderInput = () => {
     if (type === 'textarea') {

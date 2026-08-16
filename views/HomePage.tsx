@@ -228,7 +228,7 @@ const HomePage: React.FC = () => {
       {/* Main Content */}
       <div className="pt-0">
         {/* Plain Text Category Bar - Above Circular Categories */}
-        <section className="bg-white/95 backdrop-blur-md sticky top-[92px] md:top-20 z-20 border-b border-neutral-100 shadow-sm transition-all duration-300">
+        <section className="bg-white/95 backdrop-blur-md sticky top-[var(--navbar-h)] z-20 border-b border-neutral-100 shadow-sm transition-all duration-300">
           <div className="max-w-7xl mx-auto px-3 md:px-6 py-2.5 md:py-4">
             <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
               {['All', 'Men', 'Women', 'Kids', 'Watches'].map((category) => (

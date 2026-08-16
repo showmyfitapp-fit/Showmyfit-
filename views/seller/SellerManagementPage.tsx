@@ -1041,7 +1041,7 @@ const SellerManagementPageMobile: React.FC = () => {
                     <select
                       value={editFormData.category || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full max-w-full px-3 py-2 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       aria-label="Product category"
                     >
                       <option value="electronics">Electronics</option>
@@ -1127,7 +1127,7 @@ const SellerManagementPageMobile: React.FC = () => {
                     <select
                       value={editFormData.status || 'active'}
                       onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full max-w-full px-3 py-2 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       aria-label="Product status"
                     >
                       <option value="active">Active</option>
