@@ -22,7 +22,8 @@ import {
   markOutForDelivery,
   updateOrderStatus,
   verifyDeliveryOtp,
-} from '@/lib/orders/firestore';
+} from '@/lib/orders';
+import { createPickupJob } from '@/lib/delivery';
 import { buildDeliveryOtpWhatsAppUrl } from '@/lib/orders/helpers';
 import { ORDER_STATUS_LABELS, type OrderRecord, type OrderStatus } from '@/lib/orders/types';
 
@@ -61,7 +62,17 @@ const SellerOrdersPage: React.FC = () => {
     const next = NEXT_STATUS[order.status];
     if (!next || !order.id) return;
     await updateOrderStatus(order.id, next);
-    setMessage(`Order ${order.orderNumber} marked as ${ORDER_STATUS_LABELS[next]}`);
+    if (next === 'packed') {
+      try {
+        const pickupOtp = await createPickupJob({ ...order, status: next });
+        setMessage(`Order ${order.orderNumber} packed. Pickup OTP for delivery boy: ${pickupOtp}`);
+      } catch (error) {
+        console.error(error);
+        setMessage(`Order ${order.orderNumber} packed. Delivery job could not be created. Run supabase/orders-delivery.sql in Supabase.`);
+      }
+    } else {
+      setMessage(`Order ${order.orderNumber} marked as ${ORDER_STATUS_LABELS[next]}`);
+    }
     await load();
   };
 
@@ -184,6 +195,12 @@ const SellerOrdersPage: React.FC = () => {
                         <KeyRound className="w-4 h-4" />
                         Pickup code: <strong>{order.pickupCode}</strong>
                       </p>
+                      {order.pickupOtp && ['packed', 'out_for_delivery'].includes(order.status) && (
+                        <p className="flex items-center gap-2 text-orange-800 font-semibold">
+                          <KeyRound className="w-4 h-4" />
+                          Delivery pickup OTP: <strong className="tracking-widest">{order.pickupOtp}</strong>
+                        </p>
+                      )}
                       {order.items.map((item) => (
                         <p key={item.productId} className="text-gray-700">
                           {item.productName} × {item.quantity}

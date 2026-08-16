@@ -239,9 +239,9 @@ export async function getPendingSellerApplications(): Promise<JsonRecord[]> {
     }));
 }
 
-/** Orders are not migrated to Supabase yet. */
 export async function getOrders(): Promise<JsonRecord[]> {
-  return [];
+  const { fetchAllOrders } = await import('@/lib/orders/store');
+  return fetchAllOrders();
 }
 
 export async function getAdminDashboardData() {

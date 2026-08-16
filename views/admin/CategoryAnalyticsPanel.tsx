@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { BarChart3, Package, Search, TrendingUp } from 'lucide-react';
-import { fetchAllCategoriesAdmin } from '@/lib/categories/firestore';
+import { fetchAllCategoriesAdmin } from '@/lib/categories/store';
 import {
   buildCategoryAnalytics,
   fetchAllProductsForAnalytics,

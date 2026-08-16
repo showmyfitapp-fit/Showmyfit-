@@ -47,9 +47,14 @@ import ImageUpload from '@/components/common/ImageUpload';
 import SellerQRCode from '@/components/common/SellerQRCode';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUserProfile } from '@/firebase/auth';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { updateUserProfile } from '@/lib/auth';
+import { fetchSellerOrders } from '@/lib/orders';
+import {
+  deleteProduct,
+  getProductsBySeller,
+  saveProduct,
+  updateProductFields,
+} from '@/lib/supabase/admin';
 import ReservedProducts from '@/components/seller/ReservedProducts';
 import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
 import SelectDropdown from '@/components/ui/SelectDropdown';
@@ -219,16 +224,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
 
     setLoading(true);
     try {
-      const productsQuery = query(
-        collection(db, 'products'),
-        where('sellerId', '==', currentUser.uid)
-      );
-      const snapshot = await getDocs(productsQuery);
-
-      const productsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Product[];
+      const productsData = (await getProductsBySeller(currentUser.uid)) as Product[];
 
       console.log('📦 Loaded products:', productsData);
       console.log('🖼️ Product images:', productsData.map(p => ({ id: p.id, name: p.name, image: p.image })));
@@ -253,34 +249,11 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     try {
       setSellerStats(prev => ({ ...prev, loading: true }));
 
-      // Fetch orders for this seller - try sellerId first, then match by product sellerId
-      let orders: any[] = [];
-      try {
-        const ordersQuery = query(
-          collection(db, 'orders'),
-          where('sellerId', '==', currentUser.uid)
-        );
-        const ordersSnapshot = await getDocs(ordersQuery);
-        orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      } catch (error) {
-        // If sellerId query fails, fetch all orders and filter by product sellerId
-        console.log('Trying alternative order fetching method...');
-        const allOrdersQuery = query(collection(db, 'orders'));
-        const allOrdersSnapshot = await getDocs(allOrdersQuery);
-        const allOrders = allOrdersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Filter orders that contain products from this seller
-        orders = allOrders.filter((order: any) => {
-          if (order.sellerId === currentUser.uid) return true;
-          if (order.items && Array.isArray(order.items)) {
-            return order.items.some((item: any) => {
-              const product = sellerProducts.find(p => p.id === item.productId);
-              return product && product.sellerId === currentUser.uid;
-            });
-          }
-          return false;
-        });
-      }
+      const orders = (await fetchSellerOrders(currentUser.uid)).map((order) => ({
+        ...order,
+        totalAmount: order.total,
+        createdAt: { toDate: () => order.createdAt || new Date() },
+      }));
 
       // Calculate stats
       const totalOrders = orders.length;
@@ -425,22 +398,14 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
         orders: monthlyData[month.name]?.orders || 0
       })));
 
-      // Recent orders
-      const recentOrdersQuery = query(
-        collection(db, 'orders'),
-        where('sellerId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        limit(10)
-      );
-      const recentOrdersSnapshot = await getDocs(recentOrdersQuery);
-      setRecentOrders(recentOrdersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        orderId: doc.id.slice(-8).toUpperCase(),
-        customer: doc.data().userId || 'Unknown',
-        amount: doc.data().totalAmount || 0,
-        status: doc.data().status || 'pending',
-        date: doc.data().createdAt?.toDate() || new Date(),
-        items: doc.data().items?.length || 0
+      setRecentOrders(orders.slice(0, 10).map((order) => ({
+        id: order.id,
+        orderId: String(order.id).slice(-8).toUpperCase(),
+        customer: order.customerName || order.userId || 'Unknown',
+        amount: order.totalAmount || 0,
+        status: order.status || 'pending',
+        date: order.createdAt.toDate(),
+        items: order.items?.length || 0
       })));
 
       // Period comparison
@@ -955,13 +920,10 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
       console.log('🖼️ Product image URL:', productData.image);
 
       if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id!), {
-          ...productData,
-          updatedAt: new Date()
-        });
+        await saveProduct(productData, editingProduct.id);
         setMessage('Product updated successfully!');
       } else {
-        await addDoc(collection(db, 'products'), productData);
+        await saveProduct(productData);
         setMessage('Product added successfully!');
       }
 
@@ -995,7 +957,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     if (!confirm('Are you sure you want to delete this product?')) return;
 
     try {
-      await deleteDoc(doc(db, 'products', productId));
+      await deleteProduct(productId);
       await loadProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
@@ -1006,9 +968,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
   const handleToggleProductStatus = async (productId: string, currentStatus: string) => {
     try {
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-      await updateDoc(doc(db, 'products', productId), {
-        status: newStatus
-      });
+      await updateProductFields(productId, { status: newStatus });
       await loadProducts();
     } catch (error) {
       console.error('Error updating product status:', error);

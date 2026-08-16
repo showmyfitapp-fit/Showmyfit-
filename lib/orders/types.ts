@@ -33,7 +33,11 @@ export interface OrderRecord {
   orderNumber: string;
   orderGroupId: string;
   pickupCode: string;
+  pickupOtp?: string | null;
+  pickupVerified?: boolean;
   deliveryOtp?: string | null;
+  deliveryPartnerId?: string | null;
+  deliveryPartnerName?: string | null;
 
   userId: string;
   customerName: string;

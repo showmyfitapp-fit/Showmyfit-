@@ -16,8 +16,8 @@ import {
   updateProductFields,
   deleteProduct,
 } from '@/lib/supabase/admin';
-import { addSellerEmail } from '@/firebase/sellerSetup';
-import { approveSellerApplication, rejectSellerApplication } from '@/firebase/auth';
+import { addSellerEmail } from '@/lib/auth/sellerSetup';
+import { approveSellerApplication, rejectSellerApplication } from '@/lib/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface Seller {

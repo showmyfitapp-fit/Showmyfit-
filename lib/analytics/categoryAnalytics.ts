@@ -1,5 +1,4 @@
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts } from '@/lib/supabase/products';
 import type { CategoryDocument } from '@/lib/categories/types';
 import { slugify } from '@/lib/categories/slug';
 
@@ -62,10 +61,13 @@ function resolveCategorySlug(raw: string | undefined, categories: CategoryDocume
 }
 
 export async function fetchAllProductsForAnalytics(): Promise<ProductRecord[]> {
-  const snapshot = await getDocs(collection(db, 'products'));
-  return snapshot.docs.map((entry) => ({
-    id: entry.id,
-    ...(entry.data() as Omit<ProductRecord, 'id'>),
+  const products = await getProducts();
+  return products.map((product) => ({
+    id: String(product.id),
+    category: product.category,
+    subcategory: product.subcategory,
+    status: product.status,
+    categorySpecificData: product.categorySpecificData,
   }));
 }
 

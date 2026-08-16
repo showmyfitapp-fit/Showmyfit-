@@ -75,7 +75,7 @@ const CategoriesPage: React.FC = () => {
 
   // SEO Configuration
   useSEO(SEOConfigs.categories);
-  const { topLevel: firestoreCategories } = useCategories();
+  const { topLevel: catalogCategories } = useCategories();
   const [searchTerm, setSearchTerm] = useState('');
   const { addToCart, getCartItemCount, updateQuantity } = useCart();
   const [availableCategories, setAvailableCategories] = useState<Array<{ name: string; originalName?: string; image: string; count?: number }>>([]);
@@ -164,7 +164,7 @@ const CategoriesPage: React.FC = () => {
           if (cat) categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
         });
 
-        const categoriesWithData = firestoreCategories.map((category) => ({
+        const categoriesWithData = catalogCategories.map((category) => ({
           name: category.name,
           originalName: category.slug,
           image: category.image || categoryImageMap[category.slug] || 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=300&fit=crop',
@@ -175,7 +175,7 @@ const CategoriesPage: React.FC = () => {
         Object.keys(categoryCounts).forEach((slug) => {
           if (!categoriesWithData.find((c) => c.originalName === slug)) {
             categoriesWithData.push({
-              name: formatCategoryName(slug, firestoreCategories),
+              name: formatCategoryName(slug, catalogCategories),
               originalName: slug,
               image: categoryImageMap[slug] || 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=300&fit=crop',
               count: categoryCounts[slug],
@@ -200,7 +200,7 @@ const CategoriesPage: React.FC = () => {
     };
 
     fetchData();
-  }, [firestoreCategories]);
+  }, [catalogCategories]);
 
   // Filter products by category and search term
   const filteredProducts = selectedCategory

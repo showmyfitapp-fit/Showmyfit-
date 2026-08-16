@@ -1,6 +1,6 @@
 import { SEOEnhancements } from './seoEnhancements';
 import { getAllCategoriesServer } from '@/lib/categories/server';
-import { serverQueryProducts } from '@/lib/firebase/serverFirestore';
+import { getServerProducts } from '@/lib/supabase/products';
 import { SITE_URL } from '@/config/site';
 import { getProductPath } from '@/utils/productUrls';
 
@@ -36,7 +36,7 @@ export const generateSitemap = async () => {
 
   let productPages: Array<{ path: string; lastModified: string; changeFrequency: string; priority: number; title: string }> = [];
   try {
-    const products = await serverQueryProducts();
+    const products = await getServerProducts();
     productPages = products.map((product) => ({
       path: getProductPath({
         id: String(product.id),

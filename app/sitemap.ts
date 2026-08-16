@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { getAllCategoriesServer } from '@/lib/categories/server';
-import { serverQueryProducts } from '@/lib/firebase/serverFirestore';
+import { getServerProducts } from '@/lib/supabase/products';
 import { SITE_URL } from '@/config/site';
 import { getProductPath } from '@/utils/productUrls';
 
@@ -42,7 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let productRoutes: MetadataRoute.Sitemap = [];
   try {
-    const products = await serverQueryProducts();
+    const products = await getServerProducts();
     productRoutes = products.map((product) => ({
       url: `${SITE_URL}${getProductPath({
         id: String(product.id),

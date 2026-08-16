@@ -6,12 +6,12 @@
 
 /* Keep sticky page chrome aligned with the real navbar height */
 :root {
-  --navbar-h: calc(6.75rem + 1px); /* h-14 + search row (h-10 + pb-3) + border */
+  --navbar-h: calc(6.75rem + 2rem + 1px); /* navbar + search row + location bar */
 }
 
 @media (min-width: 768px) {
   :root {
-    --navbar-h: calc(5rem + 1px); /* md:h-20 + border */
+    --navbar-h: calc(5rem + 2rem + 1px); /* md navbar + location bar */
   }
 }
 

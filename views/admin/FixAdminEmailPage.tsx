@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle, Mail, RefreshCw } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import { fixAdminEmail, addCorrectAdminEmail } from '@/firebase/fixAdminEmail';
+import { fixAdminEmail, addCorrectAdminEmail } from '@/lib/auth/adminSetup';
 
 const FixAdminEmailPage: React.FC = () => {
   const [loading, setLoading] = useState(false);

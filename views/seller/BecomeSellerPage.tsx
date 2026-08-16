@@ -12,7 +12,7 @@ import Footer from '@/components/layout/Footer';
 import Button from '@/components/ui/Button';
 import GoogleMapLocation from '@/components/common/GoogleMapLocation';
 import { useAuth } from '@/contexts/AuthContext';
-import { submitSellerApplication, getSellerApplicationStatus } from '@/firebase/auth';
+import { submitSellerApplication, getSellerApplicationStatus } from '@/lib/auth';
 import SelectDropdown from '@/components/ui/SelectDropdown';
 
 const BecomeSellerPage: React.FC = () => {
@@ -237,13 +237,13 @@ const BecomeSellerPage: React.FC = () => {
         const applicationId = await submitSellerApplication(currentUser.uid, sellerApplication);
         console.log('✅ Seller application saved successfully with ID:', applicationId);
         setApplicationStatus('pending');
-      } catch (firestoreError: any) {
-        console.error('❌ Firestore error details:', {
-          code: firestoreError.code,
-          message: firestoreError.message,
-          stack: firestoreError.stack
+      } catch (dbError: any) {
+        console.error('❌ Database error details:', {
+          code: dbError.code,
+          message: dbError.message,
+          stack: dbError.stack
         });
-        throw new Error(`Database error: ${firestoreError.message} (Code: ${firestoreError.code})`);
+        throw new Error(`Database error: ${dbError.message} (Code: ${dbError.code})`);
       }
 
       console.log('🎉 Seller application process completed successfully!');

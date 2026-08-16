@@ -22,7 +22,7 @@ import {
   updatePassword as updateSupabasePassword,
   type AppUser,
   type UserData,
-} from '@/firebase/auth';
+} from '@/lib/auth';
 
 interface AuthContextType {
   currentUser: AppUser | null;

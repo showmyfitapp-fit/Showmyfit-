@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, User, Calendar, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { collection, query, where, getDocs, orderBy, updateDoc, doc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 
 interface ReservedProduct {
   id: string;
@@ -34,48 +32,19 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
   }, [sellerId]);
 
   const fetchReservedProducts = async () => {
-    try {
-      setLoading(true);
-      const q = query(
-        collection(db, 'reservedProducts'),
-        where('sellerId', '==', sellerId),
-        orderBy('reservedAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const products = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        reservedAt: doc.data().reservedAt?.toDate(),
-        expiresAt: doc.data().expiresAt?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate()
-      })) as ReservedProduct[];
-      setReservedProducts(products);
-    } catch (error) {
-      console.error('Error fetching reserved products:', error);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);
+    setReservedProducts([]);
+    setLoading(false);
   };
 
   const updateReservationStatus = async (reservationId: string, newStatus: 'confirmed' | 'cancelled') => {
-    try {
-      await updateDoc(doc(db, 'reservedProducts', reservationId), {
-        status: newStatus,
-        updatedAt: new Date()
-      });
-      
-      setReservedProducts(prev => 
-        prev.map(product => 
-          product.id === reservationId 
-            ? { ...product, status: newStatus, updatedAt: new Date() }
-            : product
-        )
-      );
-    } catch (error) {
-      console.error('Error updating reservation status:', error);
-      alert('Failed to update reservation status');
-    }
+    setReservedProducts((prev) =>
+      prev.map((product) =>
+        product.id === reservationId
+          ? { ...product, status: newStatus, updatedAt: new Date() }
+          : product
+      )
+    );
   };
 
   const getStatusIcon = (status: string) => {
@@ -108,7 +77,7 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
     return new Date() > expiresAt;
   };
 
-  const filteredProducts = reservedProducts.filter(product => {
+  const filteredProducts = reservedProducts.filter((product) => {
     if (filter === 'all') return true;
     return product.status === filter;
   });
@@ -119,7 +88,7 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
         <div className="animate-pulse">
           <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
           <div className="space-y-3">
-            {[1, 2, 3].map(i => (
+            {[1, 2, 3].map((i) => (
               <div key={i} className="h-20 bg-gray-200 rounded"></div>
             ))}
           </div>
@@ -135,14 +104,12 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
           <Clock className="w-5 h-5 mr-2 text-orange-500" />
           Reserved Products ({reservedProducts.length})
         </h3>
-        
-        {/* Filter Buttons */}
         <div className="mt-4 flex space-x-2">
           {[
             { key: 'all', label: 'All', count: reservedProducts.length },
-            { key: 'reserved', label: 'Reserved', count: reservedProducts.filter(p => p.status === 'reserved').length },
-            { key: 'confirmed', label: 'Confirmed', count: reservedProducts.filter(p => p.status === 'confirmed').length },
-            { key: 'cancelled', label: 'Cancelled', count: reservedProducts.filter(p => p.status === 'cancelled').length }
+            { key: 'reserved', label: 'Reserved', count: reservedProducts.filter((p) => p.status === 'reserved').length },
+            { key: 'confirmed', label: 'Confirmed', count: reservedProducts.filter((p) => p.status === 'confirmed').length },
+            { key: 'cancelled', label: 'Cancelled', count: reservedProducts.filter((p) => p.status === 'cancelled').length },
           ].map(({ key, label, count }) => (
             <button
               key={key}
@@ -175,7 +142,6 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
                     alt={product.productName}
                     className="w-16 h-16 object-cover rounded-lg"
                   />
-                  
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div>
@@ -192,13 +158,11 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
                           </span>
                         </div>
                       </div>
-                      
                       <div className="flex flex-col items-end space-y-2">
                         <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(product.status)}`}>
                           {getStatusIcon(product.status)}
                           <span className="capitalize">{product.status}</span>
                         </div>
-                        
                         {product.status === 'reserved' && (
                           <div className="flex space-x-2">
                             <button
@@ -215,7 +179,6 @@ const ReservedProducts: React.FC<ReservedProductsProps> = ({ sellerId }) => {
                             </button>
                           </div>
                         )}
-                        
                         {isExpired(product.expiresAt) && product.status === 'reserved' && (
                           <span className="text-xs text-red-600 font-medium">Expired</span>
                         )}

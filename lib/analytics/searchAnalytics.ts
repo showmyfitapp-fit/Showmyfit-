@@ -1,15 +1,4 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  setDoc,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getSetting, upsertSetting } from '@/lib/supabase/admin';
 import { slugify } from '@/lib/categories/slug';
 
 export interface SearchAnalyticsDoc {
@@ -22,6 +11,7 @@ export interface SearchAnalyticsDoc {
 }
 
 const LEGACY_SEARCHES_KEY = 'showmyfit_top_searches';
+const SETTINGS_ID = 'search_analytics';
 
 export function normalizeSearchQuery(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -49,7 +39,6 @@ function writeLocalSearchCount(normalizedQuery: string, displayQuery: string) {
   localStorage.setItem(LEGACY_SEARCHES_KEY, JSON.stringify(existing));
 }
 
-/** Log a search query (best-effort; falls back to localStorage if Firestore write fails). */
 export async function logSearchQuery(
   searchQuery: string,
   category?: string
@@ -60,22 +49,18 @@ export async function logSearchQuery(
   writeLocalSearchCount(normalized, searchQuery.trim());
 
   try {
+    const row = await getSetting(SETTINGS_ID);
+    const items = { ...((row?.data?.items || {}) as Record<string, any>) };
     const docId = getSearchDocId(normalized);
-    const ref = doc(db, 'search_analytics', docId);
-    const existing = await getDoc(ref);
-    const previousCount = existing.exists() ? Number(existing.data()?.count || 0) : 0;
-
-    await setDoc(
-      ref,
-      {
-        query: normalized,
-        displayQuery: searchQuery.trim(),
-        category: category && category !== 'All' ? category : null,
-        count: previousCount + 1,
-        lastSearchedAt: Timestamp.now(),
-      },
-      { merge: true }
-    );
+    const previousCount = Number(items[docId]?.count || 0);
+    items[docId] = {
+      query: normalized,
+      displayQuery: searchQuery.trim(),
+      category: category && category !== 'All' ? category : null,
+      count: previousCount + 1,
+      lastSearchedAt: new Date().toISOString(),
+    };
+    await upsertSetting(SETTINGS_ID, { items });
   } catch (error) {
     console.warn('Search analytics write failed:', error);
   }
@@ -83,29 +68,21 @@ export async function logSearchQuery(
 
 export async function fetchTopSearches(limitCount = 15): Promise<SearchAnalyticsDoc[]> {
   try {
-    const snapshot = await getDocs(
-      query(
-        collection(db, 'search_analytics'),
-        orderBy('count', 'desc'),
-        limit(limitCount)
-      )
-    );
-
-    if (!snapshot.empty) {
-      return snapshot.docs.map((entry) => {
-        const data = entry.data();
-        return {
-          id: entry.id,
-          query: String(data.query || ''),
-          displayQuery: String(data.displayQuery || data.query || ''),
-          category: data.category ? String(data.category) : null,
-          count: Number(data.count || 0),
-          lastSearchedAt: data.lastSearchedAt?.toDate?.(),
-        };
-      });
+    const row = await getSetting(SETTINGS_ID);
+    const items = (row?.data?.items || {}) as Record<string, any>;
+    const list = Object.entries(items).map(([id, value]) => ({
+      id,
+      query: String(value.query || id),
+      displayQuery: String(value.displayQuery || value.query || id),
+      category: value.category ? String(value.category) : null,
+      count: Number(value.count || 0),
+      lastSearchedAt: value.lastSearchedAt ? new Date(value.lastSearchedAt) : undefined,
+    }));
+    if (list.length) {
+      return list.sort((a, b) => b.count - a.count).slice(0, limitCount);
     }
   } catch (error) {
-    console.warn('Failed to load search analytics from Firestore:', error);
+    console.warn('Failed to load search analytics:', error);
   }
 
   const local = readLocalSearchCounts();

@@ -1,5 +1,4 @@
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { CartItem } from '@/contexts/CartContext';
 import { getUserLocation } from '@/utils/distance';
 import {
@@ -7,29 +6,38 @@ import {
   groupCartBySeller,
   type SellerShopInfo,
 } from './helpers';
-import { createOrder, createSellerNotification } from './firestore';
+import { createOrder, createSellerNotification, notifyDeliveryPartnersOfOrder } from './store';
 
 export async function fetchSellerShopInfo(sellerId: string): Promise<SellerShopInfo> {
-  const snapshot = await getDoc(doc(db, 'users', sellerId));
-  if (!snapshot.exists()) {
+  const client = getSupabaseBrowserClient();
+  const { data: profile } = await client
+    .from('profiles')
+    .select('*')
+    .or(`id.eq.${sellerId},auth_user_id.eq.${sellerId}`)
+    .maybeSingle();
+
+  if (!profile) {
     return { sellerId, sellerName: 'Store' };
   }
 
-  const data = snapshot.data();
-  const location = data.location as { lat?: number; lng?: number; address?: string } | undefined;
+  const raw = (profile.raw || {}) as Record<string, any>;
+  const location = (raw.location || profile.location) as
+    | { lat?: number; lng?: number; address?: string }
+    | undefined;
 
   return {
     sellerId,
-    sellerName: data.businessName || data.displayName || 'Store',
-    storeAddress: data.address || location?.address,
-    storePhone: data.phone,
-    storeLocation: location?.lat && location?.lng
-      ? {
-          lat: location.lat,
-          lng: location.lng,
-          address: location.address || data.address || '',
-        }
-      : null,
+    sellerName: raw.businessName || profile.display_name || raw.displayName || 'Store',
+    storeAddress: profile.address || raw.address || raw.businessAddress || location?.address,
+    storePhone: profile.phone || raw.phone,
+    storeLocation:
+      location?.lat && location?.lng
+        ? {
+            lat: location.lat,
+            lng: location.lng,
+            address: location.address || profile.address || raw.address || '',
+          }
+        : null,
   };
 }
 
@@ -43,7 +51,10 @@ export async function createOrdersFromCart(params: {
   paymentId: string;
   razorpayOrderId: string;
 }) {
-  const customerLocation = await getUserLocation();
+  const rawLocation = await getUserLocation();
+  const customerLocation = rawLocation
+    ? { lat: rawLocation.latitude, lng: rawLocation.longitude }
+    : null;
   const orderGroupId = `grp_${Date.now()}`;
   const groups = groupCartBySeller(params.cartItems);
   const createdOrders: Array<{ id: string; orderNumber: string; sellerId: string }> = [];
@@ -69,13 +80,28 @@ export async function createOrdersFromCart(params: {
     const orderId = await createOrder(draft);
     createdOrders.push({ id: orderId, orderNumber: draft.orderNumber, sellerId });
 
+    const productLine = draft.items
+      .map((item) => `${item.productName} × ${item.quantity}`)
+      .join(', ');
+
+    const sellerMessage = `${params.customerName} placed order ${draft.orderNumber} for ₹${draft.total.toLocaleString()}. Listed products: ${productLine}. Pack within 30 minutes.`;
+
     await createSellerNotification({
       sellerId,
       orderId,
       orderNumber: draft.orderNumber,
       customerName: params.customerName,
       total: draft.total,
-      message: `${params.customerName} placed order ${draft.orderNumber} for ₹${draft.total.toLocaleString()}. Pack within 30 minutes.`,
+      items: draft.items,
+      message: sellerMessage,
+    });
+
+    await notifyDeliveryPartnersOfOrder({
+      orderId,
+      orderNumber: draft.orderNumber,
+      sellerName: draft.sellerName,
+      items: draft.items,
+      message: `New order ${draft.orderNumber} at ${draft.sellerName}. ${productLine}`,
     });
   }
 

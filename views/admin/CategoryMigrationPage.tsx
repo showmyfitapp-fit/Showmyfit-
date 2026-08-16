@@ -15,7 +15,7 @@ import {
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProducts, updateProductFields } from '@/lib/supabase/admin';
-import { fetchAllCategoriesAdmin } from '@/lib/categories/firestore';
+import { fetchAllCategoriesAdmin } from '@/lib/categories/store';
 import {
   buildProductMigrationUpdate,
   filterProductsNeedingMigration,

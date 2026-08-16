@@ -24,7 +24,7 @@ import {
   saveCategory,
   deactivateCategory,
   groupCategoriesByParent,
-} from '@/lib/categories/firestore';
+} from '@/lib/categories/store';
 import { getCategoryDocId, slugify } from '@/lib/categories/slug';
 import type { CategoryDocument } from '@/lib/categories/types';
 import CategoryAnalyticsPanel from '@/views/admin/CategoryAnalyticsPanel';

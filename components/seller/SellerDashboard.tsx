@@ -7,8 +7,8 @@ import {
   ArrowDownRight, Activity, Target, Award, Clock, Bell
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { fetchSellerOrders } from '@/lib/orders';
+import { getProductsBySeller } from '@/lib/supabase/admin';
 
 interface Product {
   id: string;
@@ -101,47 +101,22 @@ const SellerDashboard: React.FC = () => {
       try {
         console.log('🔄 Loading seller data for:', currentUser.uid);
         
-        // Load products
-        const productsQuery = query(
-          collection(db, 'products'),
-          where('sellerId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc')
-        );
-        const productsSnapshot = await getDocs(productsQuery);
-        const productsData = productsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Product[];
-
-        console.log('📦 Loaded products:', productsData.length);
-
-        // Load orders from orders collection
-        const ordersQuery = query(
-          collection(db, 'orders'),
-          where('sellerId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
-        const ordersSnapshot = await getDocs(ordersQuery);
-        const ordersData = ordersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+        const productsData = (await getProductsBySeller(currentUser.uid)) as Product[];
+        const sellerOrders = await fetchSellerOrders(currentUser.uid);
+        const ordersData = sellerOrders.slice(0, 50).map((order) => ({
+          id: order.id,
+          productId: order.items[0]?.productId,
+          productName: order.items[0]?.productName,
+          quantity: order.items[0]?.quantity,
+          price: order.items[0]?.price,
+          total: order.total,
+          status: order.status,
+          createdAt: order.createdAt,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          sellerId: order.sellerId,
         })) as Order[];
-
-        console.log('🛒 Loaded orders:', ordersData.length);
-
-        // Load reserved products
-        const reservedQuery = query(
-          collection(db, 'reservedProducts'),
-          where('sellerId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
-        const reservedSnapshot = await getDocs(reservedQuery);
-        const reservedData = reservedSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as ReservedProduct[];
+        const reservedData: ReservedProduct[] = [];
 
         console.log('📋 Loaded reserved products:', reservedData.length);
 
@@ -239,40 +214,22 @@ const SellerDashboard: React.FC = () => {
     setLoading(true);
     try {
       // Reload all data
-      const productsQuery = query(
-        collection(db, 'products'),
-        where('sellerId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc')
-      );
-      const productsSnapshot = await getDocs(productsQuery);
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Product[];
-
-      const ordersQuery = query(
-        collection(db, 'orders'),
-        where('sellerId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      );
-      const ordersSnapshot = await getDocs(ordersQuery);
-      const ordersData = ordersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      const productsData = (await getProductsBySeller(currentUser.uid)) as Product[];
+      const sellerOrders = await fetchSellerOrders(currentUser.uid);
+      const ordersData = sellerOrders.slice(0, 50).map((order) => ({
+        id: order.id,
+        productId: order.items[0]?.productId,
+        productName: order.items[0]?.productName,
+        quantity: order.items[0]?.quantity,
+        price: order.items[0]?.price,
+        total: order.total,
+        status: order.status,
+        createdAt: order.createdAt,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        sellerId: order.sellerId,
       })) as Order[];
-
-      const reservedQuery = query(
-        collection(db, 'reservedProducts'),
-        where('sellerId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      );
-      const reservedSnapshot = await getDocs(reservedQuery);
-      const reservedData = reservedSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as ReservedProduct[];
+      const reservedData: ReservedProduct[] = [];
 
       setProducts(productsData);
       setOrders(ordersData);

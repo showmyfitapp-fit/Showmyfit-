@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from './Navbar';
 import { useCart } from '@/contexts/CartContext';
+import { useOrderBrowserAlerts } from '@/hooks/useOrderBrowserAlerts';
 
 // Bottom Navigation Component - Mobile Only
 const BottomNavigation = () => {
@@ -102,6 +103,7 @@ const BottomNavigation = () => {
 
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
+  useOrderBrowserAlerts();
 
   // Hide the top navbar on specific routes (e.g., product detail and seller store pages)
   const isProductDetailPage = pathname?.startsWith('/p/') || pathname?.startsWith('/product/');

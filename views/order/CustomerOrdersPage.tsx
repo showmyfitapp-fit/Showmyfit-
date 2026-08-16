@@ -15,8 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
-import { fetchCustomerOrders } from '@/lib/orders/firestore';
-import { ORDER_STATUS_LABELS, type OrderRecord } from '@/lib/orders/types';
+import { fetchCustomerOrders, ORDER_STATUS_LABELS, type OrderRecord } from '@/lib/orders';
 
 const statusColor = (status: string) => {
   switch (status) {

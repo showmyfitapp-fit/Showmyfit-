@@ -5,7 +5,7 @@ import {
   ensureCategoriesSeeded,
   fetchAllCategories,
   groupCategoriesByParent,
-} from '@/lib/categories/firestore';
+} from '@/lib/categories';
 import type { CategoryDocument } from '@/lib/categories/types';
 
 export function useCategories(options?: { autoSeed?: boolean }) {

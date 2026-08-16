@@ -11,8 +11,7 @@ import {
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useCart } from '@/contexts/CartContext';
 import FastImage from '@/components/common/FastImage';
-import { collection, query, getDocs, where, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { getProducts, getSellerProfiles } from '@/lib/supabase/products';
 import { getProductPath } from '@/utils/productUrls';
 
 interface Product {
@@ -88,11 +87,11 @@ const SellerProductsPage: React.FC = () => {
       if (!sellerId) return;
 
       try {
-        const sellerDoc = await getDoc(doc(db, 'users', sellerId));
-        if (sellerDoc.exists()) {
-          const sellerData = sellerDoc.data();
+        const sellers = await getSellerProfiles();
+        const sellerData = sellers.find((entry) => entry.id === sellerId || entry.userId === sellerId);
+        if (sellerData) {
           setSeller({
-            id: sellerDoc.id,
+            id: sellerData.id,
             name: sellerData.displayName || sellerData.name || 'Seller',
             email: sellerData.email || '',
             phone: sellerData.phone || '',
@@ -110,7 +109,7 @@ const SellerProductsPage: React.FC = () => {
               rating: 0,
               ...sellerData.stats
             },
-            createdAt: sellerData.createdAt?.toDate() || new Date()
+            createdAt: sellerData.createdAt || new Date()
           } as Seller);
         }
       } catch (error) {
@@ -128,21 +127,11 @@ const SellerProductsPage: React.FC = () => {
 
       setLoading(true);
       try {
-        const productsQuery = query(
-          collection(db, 'products'),
-          where('sellerId', '==', sellerId),
-          where('status', '==', 'active')
-        );
-        const snapshot = await getDocs(productsQuery);
-        const productsData = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date()
-          };
-        }) as Product[];
+        const productsData = (await getProducts()).filter(
+          (product) =>
+            product.status === 'active' &&
+            (product.sellerId === sellerId || product.seller_user_id === sellerId)
+        ) as Product[];
         setProducts(productsData);
       } catch (error) {
         console.error('Error fetching products:', error);

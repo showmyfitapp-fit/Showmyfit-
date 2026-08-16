@@ -20,7 +20,7 @@ const SearchPage: React.FC = () => {
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { topLevel: firestoreCategories } = useCategories();
+  const { topLevel: catalogCategories } = useCategories();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -96,11 +96,11 @@ const SearchPage: React.FC = () => {
         const productCategorySlugs = Array.from(
           new Set(productsList.map((p: any) => p.category?.toLowerCase()).filter(Boolean))
         );
-        const firestoreNames = firestoreCategories.map((c) => c.name);
+        const catalogNames = catalogCategories.map((c) => c.name);
         const legacyNames = productCategorySlugs
-          .filter((slug) => !firestoreCategories.find((c) => c.slug === slug))
-          .map((slug) => formatCategoryName(slug, firestoreCategories));
-        setAvailableCategories(['All', ...firestoreNames, ...legacyNames]);
+          .filter((slug) => !catalogCategories.find((c) => c.slug === slug))
+          .map((slug) => formatCategoryName(slug, catalogCategories));
+        setAvailableCategories(['All', ...catalogNames, ...legacyNames]);
         setProducts(productsList);
       } catch (error) {
         console.error('Error loading products:', error);
@@ -109,7 +109,7 @@ const SearchPage: React.FC = () => {
       }
     };
     fetchProducts();
-  }, [firestoreCategories]);
+  }, [catalogCategories]);
 
   const matchesProductSearch = (product: any, queryText: string) => {
     if (!queryText) return true;

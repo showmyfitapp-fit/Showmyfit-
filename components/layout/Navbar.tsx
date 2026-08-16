@@ -13,6 +13,7 @@ import { useWishlist } from '@/contexts/WishlistContext';
 import { getProductPath } from '@/utils/productUrls';
 import { logSearchQuery } from '@/lib/analytics/searchAnalytics';
 import { getProducts } from '@/lib/supabase/products';
+import LocationBar from './LocationBar';
 
 interface NavbarProps {
   userRole?: 'user' | 'shop' | 'admin';
@@ -338,6 +339,7 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
             {/* Mobile Suggestions would go here in a real implementation or fullscreen overlay */}
           </div>
         </div>
+        <LocationBar />
       </nav>
 
       <Sidebar

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, Key, CheckCircle, AlertCircle } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import { addAdminEmail } from '@/firebase/adminSetup';
+import { addAdminEmail } from '@/lib/auth/adminSetup';
 
 const AdminSetupPage: React.FC = () => {
   const [email, setEmail] = useState('');

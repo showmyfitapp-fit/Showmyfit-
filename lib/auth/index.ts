@@ -76,9 +76,9 @@ function mapProfile(row: any): UserData {
 
 export function toAppUser(user: SupabaseUser, profile?: UserData | null): AppUser {
   const metadata = user.user_metadata || {};
-  const firebaseUid = metadata.fbuser?.uid;
+  const legacyUid = metadata.fbuser?.uid;
   return Object.assign(user, {
-    uid: profile?.uid || firebaseUid || user.id,
+    uid: profile?.uid || legacyUid || user.id,
     displayName:
       profile?.displayName || metadata.display_name || metadata.full_name || null,
     photoURL: profile?.profileImage || metadata.avatar_url || null,

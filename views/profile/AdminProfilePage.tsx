@@ -46,7 +46,7 @@ import 'jspdf-autotable';
 import Button from '@/components/ui/Button';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUserData } from '@/firebase/auth';
+import { updateUserData } from '@/lib/auth';
 import {
   getAdminDashboardData,
   orderCreatedAt,
@@ -974,6 +974,13 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
                           >
                             <Package className="w-4 h-4 mr-2 text-purple-600" />
                             Manage Products
+                          </button>
+                          <button
+                            onClick={() => { router.push('/delivery'); setShowQuickActions(false); }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                          >
+                            <Package className="w-4 h-4 mr-2 text-orange-600" />
+                            Delivery jobs
                           </button>
                           <div className="border-t my-1"></div>
                           <button

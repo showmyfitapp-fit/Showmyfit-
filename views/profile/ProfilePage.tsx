@@ -12,7 +12,7 @@ import {
 import ImageUpload from '@/components/common/ImageUpload';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUserProfile, getSellerApplicationStatus } from '@/firebase/auth';
+import { updateUserProfile, getSellerApplicationStatus } from '@/lib/auth';
 import AdminProfilePage from './AdminProfilePage';
 import SellerProfilePage from './SellerProfilePage';
 
