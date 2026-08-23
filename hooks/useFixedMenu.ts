@@ -13,14 +13,14 @@ export function getFixedMenuStyle(button: HTMLElement | null): React.CSSProperti
   const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
 
   return {
-    position: 'fixed',
-    left: rect.left,
-    width: rect.width,
-    zIndex: 80,
+    position: 'absolute',
+    left: 0,
+    width: '100%',
+    zIndex: 100,
     maxHeight: Math.min(maxH, Math.max(120, openUp ? spaceAbove : spaceBelow)),
     ...(openUp
-      ? { bottom: window.innerHeight - rect.top + gap }
-      : { top: rect.bottom + gap }),
+      ? { bottom: '100%', marginBottom: gap }
+      : { top: '100%', marginTop: gap }),
   };
 }
 

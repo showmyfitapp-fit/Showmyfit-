@@ -65,7 +65,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Category {required && <span className="text-red-500">*</span>}
         </label>
-        <div ref={categoryMenu.rootRef} className="relative">
+        <div ref={categoryMenu.rootRef} className="relative z-30">
           <button
             ref={categoryMenu.triggerRef}
             type="button"
@@ -122,7 +122,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Subcategory {required && <span className="text-red-500">*</span>}
           </label>
-          <div ref={subcategoryMenu.rootRef} className="relative">
+          <div ref={subcategoryMenu.rootRef} className="relative z-30">
             <button
               ref={subcategoryMenu.triggerRef}
               type="button"
