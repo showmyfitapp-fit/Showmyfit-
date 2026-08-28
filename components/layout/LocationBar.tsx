@@ -32,6 +32,7 @@ const LocationBar: React.FC = () => {
     setLocError('');
     try {
       const result = await requestPlaceName();
+      console.log("🔍 ~  ~ components/layout/LocationBar.tsx:34 ~ result:", result);
       setPlace(result.name);
     } catch {
       setLocError('Allow location access to show your area');
@@ -47,7 +48,7 @@ const LocationBar: React.FC = () => {
 
   return (
     <div className="border-t border-neutral-100 bg-neutral-50/90">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center justify-between gap-3 text-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center justify-between gap-3 text-xs">
         <button
           type="button"
           onClick={place ? undefined : enableLocation}

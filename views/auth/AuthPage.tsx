@@ -24,7 +24,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     }
     return initialMode;
   });
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('otp');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -139,7 +139,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     setMode(next);
     setError('');
     setSuccess('');
-    setLoginMethod('email');
+    setLoginMethod(next === 'login' ? 'otp' : 'email');
     setFormData((prev) => ({ ...prev, password: '', confirmPassword: '' }));
   };
 
@@ -242,21 +242,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
               <button
                 type="button"
                 onClick={() => {
-                  setLoginMethod('email');
-                  setError('');
-                  setSuccess('');
-                }}
-                className={`py-3 rounded-xl text-sm font-bold transition-all ${
-                  loginMethod === 'email'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Email
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   setLoginMethod('otp');
                   setError('');
                   setSuccess('');
@@ -268,6 +253,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
                 }`}
               >
                 Login with OTP
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMethod('email');
+                  setError('');
+                  setSuccess('');
+                }}
+                className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                  loginMethod === 'email'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Email
               </button>
             </div>
           )}

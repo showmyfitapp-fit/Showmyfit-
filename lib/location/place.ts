@@ -26,8 +26,7 @@ function writeCache(place: PlaceName) {
 function formatPlace(data: Record<string, any>): PlaceName {
   const locality = data.locality || data.city || '';
   const city = data.city || data.principalSubdivision || '';
-  const area = data.localityInfo?.informative?.[0]?.name || '';
-  const parts = [area && area !== locality ? area : locality || city, city]
+  const parts = [city && city !== locality ? city : locality || city, city]
     .filter(Boolean)
     .filter((value, index, list) => list.indexOf(value) === index);
   return {
