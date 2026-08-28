@@ -398,7 +398,7 @@ const ProductManagementPage: React.FC = () => {
                             reviews: 1250,
                             tags: ['smartphone', 'apple', 'premium', 'camera'],
                             featured: true,
-                            status: 'active',
+                            status: 'active' as const,
                             createdAt: new Date(),
                             updatedAt: new Date()
                           };
@@ -438,7 +438,7 @@ const ProductManagementPage: React.FC = () => {
                             reviews: 890,
                             tags: ['shoes', 'nike', 'running', 'sports'],
                             featured: false,
-                            status: 'active',
+                            status: 'active' as const,
                             createdAt: new Date(),
                             updatedAt: new Date()
                           };
@@ -476,7 +476,7 @@ const ProductManagementPage: React.FC = () => {
                             reviews: 234,
                             tags: ['car', 'honda', 'sedan', 'premium'],
                             featured: true,
-                            status: 'active',
+                            status: 'active' as const,
                             createdAt: new Date(),
                             updatedAt: new Date()
                           };

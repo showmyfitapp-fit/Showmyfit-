@@ -19,6 +19,7 @@ import {
 import { addSellerEmail } from '@/lib/auth/sellerSetup';
 import { approveSellerApplication, rejectSellerApplication } from '@/lib/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
 
 interface Seller {
   id: string; // Application ID
@@ -371,6 +372,8 @@ const SellerManagementPageMobile: React.FC = () => {
       price: product.price,
       originalPrice: product.originalPrice,
       category: product.category,
+      subcategory: product.subcategory || '',
+      subcategoryName: product.subcategoryName || '',
       brand: product.brand,
       image: product.image,
       stock: product.stock,
@@ -1036,27 +1039,27 @@ const SellerManagementPageMobile: React.FC = () => {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                    <select
-                      value={editFormData.category || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                      className="w-full max-w-full px-3 py-2 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      aria-label="Product category"
-                    >
-                      <option value="electronics">Electronics</option>
-                      <option value="fashion">Fashion</option>
-                      <option value="home">Home & Garden</option>
-                      <option value="beauty">Beauty & Personal Care</option>
-                      <option value="sports">Sports & Fitness</option>
-                      <option value="books">Books & Media</option>
-                      <option value="toys">Toys & Games</option>
-                      <option value="automotive">Automotive</option>
-                      <option value="health">Health & Wellness</option>
-                      <option value="food">Food & Beverages</option>
-                      <option value="jewelry">Jewelry & Accessories</option>
-                      <option value="furniture">Furniture</option>
-                    </select>
+                  <div className="md:col-span-2">
+                    <ProductCategoryPicker
+                      category={editFormData.category || ''}
+                      subcategory={editFormData.subcategory || ''}
+                      onCategoryChange={(categorySlug) => {
+                        setEditFormData({
+                          ...editFormData,
+                          category: categorySlug,
+                          subcategory: '',
+                          subcategoryName: '',
+                        });
+                      }}
+                      onSubcategoryChange={(subcategorySlug, subcategoryName) => {
+                        setEditFormData({
+                          ...editFormData,
+                          subcategory: subcategorySlug,
+                          subcategoryName,
+                        });
+                      }}
+                      required={false}
+                    />
                   </div>
 
                   <div>

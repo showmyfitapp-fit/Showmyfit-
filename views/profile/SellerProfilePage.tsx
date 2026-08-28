@@ -827,7 +827,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     const hasName = formData.name.trim() !== '';
     const hasBrand = formData.brand.trim() !== '';
     const hasPrice = formData.price > 0;
-    const hasOriginalPrice = formData.originalPrice > 0;
+    const hasOriginalPrice = (formData.originalPrice ?? 0) > 0;
     const hasCategory = formData.category !== '';
     const hasSubcategory = formData.subcategory !== '';
     const hasStock = formData.stock >= 1;
@@ -1822,7 +1822,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                     tooltip: {
                                       callbacks: {
                                         label: function (context) {
-                                          return `₹${context.parsed.x.toLocaleString()}`;
+                                          return `₹${(context.parsed.x ?? 0).toLocaleString()}`;
                                         }
                                       }
                                     }
@@ -1892,7 +1892,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                     callbacks: {
                                       label: function (context) {
                                         const label = context.dataset.label || '';
-                                        const value = context.parsed.y;
+                                        const value = context.parsed.y ?? 0;
                                         if (label.includes('Revenue')) {
                                           return `${label}: ₹${value.toLocaleString()}`;
                                         }
@@ -2021,7 +2021,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                               {/* Clickable Product Link */}
                               <Link
-                                href={getProductPath(product)}
+                                href={product.id ? getProductPath({ id: product.id, slug: product.slug }) : '#'}
                                 className="block hover:opacity-90 transition-opacity cursor-pointer"
                               >
                                 {/* Product Image */}
@@ -2406,7 +2406,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                   ) : currentField.type === 'multi-select' ? (
                                     <div className="space-y-2">
                                       <div className="flex flex-wrap gap-2">
-                                        {currentField.options.map((option: string) => {
+                                        {(currentField.options || []).map((option: string) => {
                                           const isSelected = (categorySpecificData[key] || []).includes(option);
                                           return (
                                             <button
@@ -2488,7 +2488,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                       />
                                       <p className="text-xs text-gray-500 mt-1">Separate multiple items with commas</p>
                                     </div>
-                                  ) : currentField.type === 'number' ? (
+                                  ) : (currentField.type as string) === 'number' ? (
                                     <input
                                       type="number"
                                       min="0"
@@ -2542,7 +2542,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             {formData.name.trim() === '' && <li>Product Name is required</li>}
                             {formData.brand.trim() === '' && <li>Brand Name is required</li>}
                             {formData.price <= 0 && <li>Selling Price must be greater than 0</li>}
-                            {formData.originalPrice <= 0 && <li>Original Price (MRP) must be greater than 0</li>}
+                            {(formData.originalPrice ?? 0) <= 0 && <li>Original Price (MRP) must be greater than 0</li>}
                             {formData.category === '' && <li>Category must be selected</li>}
                             {formData.stock < 1 && <li>Stock Quantity must be at least 1</li>}
                             {formData.image.trim() === '' && <li>At least one product image must be uploaded</li>}
