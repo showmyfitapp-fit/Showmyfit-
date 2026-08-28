@@ -75,6 +75,18 @@ create table if not exists public.delivery_partners (
   created_at timestamptz default now()
 );
 
+alter table public.delivery_partners
+  add column if not exists auth_user_id text;
+
+alter table public.delivery_partners
+  add column if not exists is_online boolean not null default false;
+
+alter table public.delivery_partners
+  add column if not exists last_online_at timestamptz;
+
+create index if not exists delivery_partners_is_online_idx
+  on public.delivery_partners (is_online);
+
 create table if not exists public.delivery_jobs (
   id uuid primary key default gen_random_uuid(),
   order_id text not null,

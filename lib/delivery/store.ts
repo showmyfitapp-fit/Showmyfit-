@@ -45,24 +45,68 @@ function db() {
   return getSupabaseBrowserClient();
 }
 
-export async function isDeliveryPartner(userId: string): Promise<boolean> {
+function mapPartner(row: Record<string, any>): DeliveryPartner {
+  return {
+    id: String(row.id),
+    authUserId: row.auth_user_id ? String(row.auth_user_id) : undefined,
+    name: String(row.name || 'Delivery partner'),
+    phone: row.phone ? String(row.phone) : undefined,
+    isOnline: Boolean(row.is_online),
+    lastOnlineAt: toDate(row.last_online_at),
+  };
+}
+
+function partnerUserIds(partners: Array<{ id: string; authUserId?: string }>): string[] {
+  return Array.from(
+    new Set(
+      partners.flatMap((partner) =>
+        [partner.id, partner.authUserId].filter(Boolean).map(String)
+      )
+    )
+  );
+}
+
+export async function getDeliveryPartner(userId: string): Promise<DeliveryPartner | null> {
   const { data, error } = await db()
     .from('delivery_partners')
-    .select('id')
+    .select('*')
     .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
     .maybeSingle();
   if (error) throw error;
-  return Boolean(data);
+  return data ? mapPartner(data) : null;
+}
+
+export async function isDeliveryPartner(userId: string): Promise<boolean> {
+  return Boolean(await getDeliveryPartner(userId));
+}
+
+export async function setDeliveryPartnerOnline(
+  userId: string,
+  isOnline: boolean
+): Promise<DeliveryPartner> {
+  const partner = await getDeliveryPartner(userId);
+  if (!partner) {
+    throw new Error('Your account is not enabled as a delivery partner');
+  }
+
+  const { data, error } = await db()
+    .from('delivery_partners')
+    .update({
+      is_online: isOnline,
+      last_online_at: new Date().toISOString(),
+    })
+    .eq('id', partner.id)
+    .select('*')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Could not update online status');
+  return mapPartner(data);
 }
 
 export async function fetchDeliveryPartners(): Promise<DeliveryPartner[]> {
   const { data, error } = await db().from('delivery_partners').select('*');
   if (error) throw error;
-  return (data || []).map((row) => ({
-    id: String(row.id),
-    name: String(row.name || 'Delivery partner'),
-    phone: row.phone ? String(row.phone) : undefined,
-  }));
+  return (data || []).map(mapPartner);
 }
 
 export async function enableDeliveryPartner(params: {
@@ -144,9 +188,9 @@ export async function createPickupJob(order: OrderRecord): Promise<string> {
   });
   if (error) throw error;
 
-  const partners = await fetchDeliveryPartners();
+  const partners = (await fetchDeliveryPartners()).filter((partner) => partner.isOnline);
   await notifyUsers(
-    partners.map((partner) => partner.id),
+    partnerUserIds(partners),
     {
       type: 'delivery_pickup',
       title: 'New pickup ready',
@@ -167,12 +211,15 @@ export async function fetchDeliveryJobs(partnerId?: string): Promise<DeliveryJob
     .order('created_at', { ascending: false });
   if (error) throw error;
 
+  const partner = partnerId ? await getDeliveryPartner(partnerId) : null;
+
   return (data || [])
     .map(mapJob)
     .filter((job) => {
       if (job.status === 'cancelled' || job.status === 'delivered') return false;
       if (!partnerId) return true;
-      return job.status === 'available' || job.deliveryPartnerId === partnerId;
+      if (job.deliveryPartnerId === partnerId) return true;
+      return job.status === 'available' && Boolean(partner?.isOnline);
     });
 }
 
@@ -190,6 +237,11 @@ export async function acceptDeliveryJob(
   if (!data) throw new Error('Job not found');
   const job = mapJob(data);
   if (job.status !== 'available') throw new Error('Job is no longer available');
+
+  const partner = await getDeliveryPartner(partnerId);
+  if (!partner?.isOnline) {
+    throw new Error('Go online to accept deliveries');
+  }
 
   const { error: updateError } = await db()
     .from('delivery_jobs')

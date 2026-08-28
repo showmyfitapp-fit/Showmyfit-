@@ -19,9 +19,11 @@ import {
   acceptDeliveryJob,
   completeDeliveryJob,
   enableDeliveryPartner,
+  getDeliveryPartner,
   fetchDeliveryJobs,
   isDeliveryPartner,
   mapsUrl,
+  setDeliveryPartnerOnline,
   verifyPickupOtp,
   type DeliveryJob,
 } from '@/lib/delivery';
@@ -37,6 +39,8 @@ const DeliveryJobsPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [partnerUid, setPartnerUid] = useState('');
   const [partnerName, setPartnerName] = useState('');
+  const [isOnline, setIsOnline] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
 
@@ -47,6 +51,8 @@ const DeliveryJobsPage: React.FC = () => {
       const partner = isAdmin || (await isDeliveryPartner(currentUser.uid));
       setAllowed(partner);
       if (!partner) return;
+      const rider = await getDeliveryPartner(currentUser.uid);
+      setIsOnline(Boolean(rider?.isOnline));
       setJobs(await fetchDeliveryJobs(isAdmin ? undefined : currentUser.uid));
     } catch (error) {
       console.error(error);
@@ -70,15 +76,34 @@ const DeliveryJobsPage: React.FC = () => {
     await load();
   };
 
+  const handleOnlineToggle = async () => {
+    if (!currentUser) return;
+    setStatusLoading(true);
+    try {
+      const updated = await setDeliveryPartnerOnline(currentUser.uid, !isOnline);
+      setIsOnline(updated.isOnline);
+      setMessage(updated.isOnline ? 'You are online. New jobs can be assigned to you.' : 'You are offline.');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update online status');
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
   const handleAccept = async (job: DeliveryJob) => {
     if (!currentUser || !job.id) return;
-    await acceptDeliveryJob(
-      job.id,
-      currentUser.uid,
-      userData?.displayName || currentUser.displayName || 'Rider'
-    );
-    setMessage(`Accepted ${job.orderNumber}`);
-    await load();
+    try {
+      await acceptDeliveryJob(
+        job.id,
+        currentUser.uid,
+        userData?.displayName || currentUser.displayName || 'Rider'
+      );
+      setMessage(`Accepted ${job.orderNumber}`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not accept this job');
+    }
   };
 
   const handlePickup = async (job: DeliveryJob) => {
@@ -157,6 +182,35 @@ const DeliveryJobsPage: React.FC = () => {
           </div>
         </div>
 
+        <div className="mb-4 p-4 bg-white border rounded-xl flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-gray-900">
+              {isOnline ? 'Online' : 'Offline'}
+            </p>
+            <p className="text-xs text-gray-500">
+              {isOnline
+                ? 'You can accept new pickups.'
+                : 'Go online to get assigned delivery jobs.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOnlineToggle}
+            disabled={statusLoading}
+            className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              isOnline ? 'bg-green-500' : 'bg-gray-300'
+            }`}
+            aria-pressed={isOnline}
+            aria-label={isOnline ? 'Go offline' : 'Go online'}
+          >
+            <span
+              className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${
+                isOnline ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
         {isAdmin && (
           <div className="mb-4 p-4 bg-white border rounded-xl flex flex-col sm:flex-row gap-2">
             <input
@@ -199,7 +253,9 @@ const DeliveryJobsPage: React.FC = () => {
           <div className="text-center py-16 text-gray-500">Loading jobs...</div>
         ) : jobs.length === 0 ? (
           <div className="bg-white rounded-2xl border p-12 text-center text-gray-500">
-            No active pickups. Jobs appear when a seller marks an order as packed.
+            {!isOnline && !isAdmin
+              ? 'You are offline. Go online to receive new pickup jobs.'
+              : 'No active pickups. Jobs appear when a seller marks an order as packed.'}
           </div>
         ) : (
           <div className="space-y-4">

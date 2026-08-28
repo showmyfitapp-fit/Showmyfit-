@@ -33,6 +33,9 @@ export interface DeliveryJob {
 
 export interface DeliveryPartner {
   id: string;
+  authUserId?: string;
   name: string;
   phone?: string;
+  isOnline: boolean;
+  lastOnlineAt?: Date | null;
 }

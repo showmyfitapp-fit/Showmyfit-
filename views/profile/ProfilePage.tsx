@@ -7,7 +7,7 @@ import {
   User, Edit, LogOut,
   ShoppingBag, Heart, Settings,
   Calendar, Award, Package, XCircle, CheckCircle,
-  Bell, RefreshCw, Search, Info
+  Bell, RefreshCw, Search, Info, Bike
 } from 'lucide-react';
 import ImageUpload from '@/components/common/ImageUpload';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
@@ -15,6 +15,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateUserProfile, getSellerApplicationStatus } from '@/lib/auth';
 import AdminProfilePage from './AdminProfilePage';
 import SellerProfilePage from './SellerProfilePage';
+import {
+  getDeliveryPartner,
+  setDeliveryPartnerOnline,
+} from '@/lib/delivery';
 
 const ProfilePage: React.FC = () => {
   const { currentUser, userData, signOut, refreshUserData, loading } = useAuth();
@@ -33,6 +37,9 @@ const ProfilePage: React.FC = () => {
   });
 
   const [applicationStatus, setApplicationStatus] = useState<'not_applied' | 'pending' | 'approved' | 'rejected'>('not_applied');
+  const [isDeliveryRider, setIsDeliveryRider] = useState(false);
+  const [riderOnline, setRiderOnline] = useState(false);
+  const [riderStatusLoading, setRiderStatusLoading] = useState(false);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -50,12 +57,40 @@ const ProfilePage: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
+    const loadRider = async () => {
+      if (!currentUser) return;
+      try {
+        const partner = await getDeliveryPartner(currentUser.uid);
+        setIsDeliveryRider(Boolean(partner));
+        setRiderOnline(Boolean(partner?.isOnline));
+      } catch (error) {
+        console.error('Error checking delivery partner status:', error);
+      }
+    };
+    loadRider();
+  }, [currentUser]);
+
+  useEffect(() => {
     console.log('Current application status:', applicationStatus);
   }, [applicationStatus]);
 
   useEffect(() => {
     if (!loading && !currentUser) router.push('/auth');
   }, [loading, currentUser, router]);
+
+  const handleRiderOnlineToggle = async () => {
+    if (!currentUser) return;
+    setRiderStatusLoading(true);
+    try {
+      const updated = await setDeliveryPartnerOnline(currentUser.uid, !riderOnline);
+      setRiderOnline(updated.isOnline);
+    } catch (error) {
+      console.error('Error updating delivery online status:', error);
+      alert(error instanceof Error ? error.message : 'Could not update online status');
+    } finally {
+      setRiderStatusLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -172,6 +207,14 @@ const ProfilePage: React.FC = () => {
   };
 
   const menuItems: { title: string; items: MenuItem[] }[] = [
+    ...(isDeliveryRider
+      ? [
+          {
+            title: 'Delivery',
+            items: [{ label: 'Delivery jobs', icon: Bike, href: '/delivery' }],
+          },
+        ]
+      : []),
     {
       title: 'Shopping',
       items: [
@@ -302,6 +345,47 @@ const ProfilePage: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="max-w-xl mx-auto px-4 mt-6 space-y-8">
+
+        {isDeliveryRider && (
+          <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-orange-600">Delivery partner</p>
+                <h3 className="text-lg font-black text-gray-900 mt-1">
+                  {riderOnline ? 'You are online' : 'You are offline'}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {riderOnline
+                    ? 'New pickups can be assigned to you.'
+                    : 'Go online to receive delivery jobs.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRiderOnlineToggle}
+                disabled={riderStatusLoading}
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                  riderOnline ? 'bg-green-500' : 'bg-gray-300'
+                }`}
+                aria-pressed={riderOnline}
+                aria-label={riderOnline ? 'Go offline' : 'Go online'}
+              >
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${
+                    riderOnline ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <Link
+              href="/delivery"
+              className="mt-4 w-full inline-flex items-center justify-center gap-2 bg-black text-white py-3 rounded-2xl font-bold hover:bg-gray-800 transition-colors"
+            >
+              <Bike className="w-5 h-5" />
+              Open delivery jobs
+            </Link>
+          </div>
+        )}
 
         {/* Incomplete Profile Warning */}
         {(!currentUser.displayName || !userData?.phone) && (

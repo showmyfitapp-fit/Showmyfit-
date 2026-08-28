@@ -10,7 +10,7 @@ import {
   ShoppingBag, Heart, Star, Package, DollarSign, Activity,
   Download, Search, HelpCircle, Filter, RefreshCw, FileText,
   Bell, Zap, Clock, TrendingDown, AlertCircle, Database,
-  ChevronDown, Command, MoreVertical, PlayCircle, PauseCircle
+  ChevronDown, Command, MoreVertical, PlayCircle, PauseCircle, Bike
 } from 'lucide-react';
 // Chart.js imports
 import {
@@ -52,6 +52,7 @@ import {
   orderCreatedAt,
   orderTotal,
 } from '@/lib/supabase/admin';
+import { fetchDeliveryPartners, type DeliveryPartner } from '@/lib/delivery';
 
 interface AdminProfilePageProps {
   currentUser: any;
@@ -121,6 +122,7 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
     storage: 'healthy'
   });
   const [selectedApprovals, setSelectedApprovals] = useState<string[]>([]);
+  const [deliveryPartners, setDeliveryPartners] = useState<DeliveryPartner[]>([]);
 
   // Fetch real-time data
   const fetchRealTimeData = async () => {
@@ -221,6 +223,12 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
       }
       setSystemAlerts(alerts);
       setNotificationCount(pendingApprovalsData.length + alerts.length);
+
+      try {
+        setDeliveryPartners(await fetchDeliveryPartners());
+      } catch (partnerError) {
+        console.error('Error fetching delivery partners:', partnerError);
+      }
 
       calculatePeriodComparison(orders, profiles);
       await fetchChartData(orders, profiles, products);
@@ -881,7 +889,7 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
         <div className="min-h-screen px-4 py-8">
           <div className="max-w-7xl mx-auto">
             {/* Admin Header */}
-            <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-2xl shadow-xl p-8 mb-8">
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-2xl shadow-xl p-8 mb-8 overflow-visible">
               <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
                 {/* Admin Badge */}
                 <div className="relative">
@@ -952,49 +960,49 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
                       <ChevronDown className="w-4 h-4 ml-2" />
                     </button>
                     {showQuickActions && (
-                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl z-50 border border-gray-200">
+                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl z-50 border border-gray-200 text-gray-900">
                         <div className="py-2">
                           <button
                             onClick={() => { router.push('/admin/users'); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Users className="w-4 h-4 mr-2 text-blue-600" />
+                            <Users className="w-4 h-4 mr-2 text-blue-600 shrink-0" />
                             Manage Users
                           </button>
                           <button
                             onClick={() => { router.push('/admin/sellers'); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Store className="w-4 h-4 mr-2 text-green-600" />
+                            <Store className="w-4 h-4 mr-2 text-green-600 shrink-0" />
                             Manage Sellers
                           </button>
                           <button
                             onClick={() => { router.push('/admin/products'); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Package className="w-4 h-4 mr-2 text-purple-600" />
+                            <Package className="w-4 h-4 mr-2 text-purple-600 shrink-0" />
                             Manage Products
                           </button>
                           <button
                             onClick={() => { router.push('/delivery'); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Package className="w-4 h-4 mr-2 text-orange-600" />
+                            <Bike className="w-4 h-4 mr-2 text-orange-600 shrink-0" />
                             Delivery jobs
                           </button>
                           <div className="border-t my-1"></div>
                           <button
                             onClick={() => { exportReport(); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Download className="w-4 h-4 mr-2 text-orange-600" />
+                            <Download className="w-4 h-4 mr-2 text-orange-600 shrink-0" />
                             Export Report
                           </button>
                           <button
                             onClick={() => { setShowShortcuts(true); setShowQuickActions(false); }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-gray-800 text-sm font-medium"
                           >
-                            <Command className="w-4 h-4 mr-2 text-gray-600" />
+                            <Command className="w-4 h-4 mr-2 text-gray-600 shrink-0" />
                             Keyboard Shortcuts
                           </button>
                         </div>
@@ -1710,6 +1718,13 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
                         <div className="text-sm text-gray-600">Manage Products</div>
                       </div>
                     </Link>
+                    <Link href="/delivery" className="group">
+                      <div className="bg-orange-50 rounded-xl p-4 text-center group-hover:bg-orange-100 transition-colors">
+                        <Bike className="w-8 h-8 text-orange-600 mx-auto mb-2" />
+                        <div className="font-semibold text-gray-900">Delivery Jobs</div>
+                        <div className="text-sm text-gray-600">Riders & pickups</div>
+                      </div>
+                    </Link>
                     <Link href="/admin/settings" className="group">
                       <div className="bg-gray-50 rounded-xl p-4 text-center group-hover:bg-gray-100 transition-colors">
                         <Settings className="w-8 h-8 text-gray-600 mx-auto mb-2" />
@@ -1718,6 +1733,49 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ currentUser, userDa
                       </div>
                     </Link>
                   </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                      <Bike className="w-6 h-6 mr-2 text-orange-600" />
+                      Delivery partners
+                    </h2>
+                    <span className="text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
+                      {deliveryPartners.filter((partner) => partner.isOnline).length} online
+                    </span>
+                  </div>
+                  {deliveryPartners.length === 0 ? (
+                    <p className="text-sm text-gray-500">No delivery partners yet. Enable riders from the delivery page.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {deliveryPartners.map((partner) => (
+                        <div
+                          key={partner.id}
+                          className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{partner.name}</p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {partner.phone || 'No phone'}
+                              {partner.lastOnlineAt
+                                ? ` · last seen ${partner.lastOnlineAt.toLocaleString()}`
+                                : ''}
+                            </p>
+                          </div>
+                          <span
+                            className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold ${
+                              partner.isOnline
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {partner.isOnline ? 'Online' : 'Offline'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Pending Approvals */}

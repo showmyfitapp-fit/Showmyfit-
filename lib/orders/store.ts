@@ -207,7 +207,8 @@ export async function notifyDeliveryPartnersOfOrder(params: {
 }) {
   const { data, error } = await getSupabaseBrowserClient()
     .from('delivery_partners')
-    .select('id, auth_user_id');
+    .select('id, auth_user_id')
+    .eq('is_online', true);
   if (error || !data?.length) return;
 
   const userIds = Array.from(

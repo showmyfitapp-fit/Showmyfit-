@@ -30,6 +30,15 @@ create table if not exists public.delivery_partners (
 alter table public.delivery_partners
   add column if not exists auth_user_id text;
 
+alter table public.delivery_partners
+  add column if not exists is_online boolean not null default false;
+
+alter table public.delivery_partners
+  add column if not exists last_online_at timestamptz;
+
+create index if not exists delivery_partners_is_online_idx
+  on public.delivery_partners (is_online);
+
 create table if not exists public.delivery_jobs (
   id uuid primary key default gen_random_uuid(),
   order_id text not null,
@@ -73,18 +82,3 @@ create policy delivery_jobs_authenticated_all on public.delivery_jobs
 grant select, insert, update, delete on public.notifications to authenticated;
 grant select, insert, update, delete on public.delivery_partners to authenticated;
 grant select, insert, update, delete on public.delivery_jobs to authenticated;
-
--- Add a delivery partner by login email.
--- Change the email, then run this block.
-insert into public.delivery_partners (id, auth_user_id, name, phone)
-select
-  p.id::text,
-  coalesce(p.auth_user_id::text, p.id::text),
-  coalesce(p.display_name, p.email, 'Delivery partner'),
-  coalesce(p.phone, '')
-from public.profiles p
-where lower(p.email) = lower('you@email.com')
-on conflict (id) do update
-  set auth_user_id = excluded.auth_user_id,
-      name = excluded.name,
-      phone = excluded.phone;
