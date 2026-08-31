@@ -1044,19 +1044,19 @@ const SellerManagementPageMobile: React.FC = () => {
                       category={editFormData.category || ''}
                       subcategory={editFormData.subcategory || ''}
                       onCategoryChange={(categorySlug) => {
-                        setEditFormData({
-                          ...editFormData,
+                        setEditFormData((prev) => ({
+                          ...prev,
                           category: categorySlug,
                           subcategory: '',
                           subcategoryName: '',
-                        });
+                        }));
                       }}
                       onSubcategoryChange={(subcategorySlug, subcategoryName) => {
-                        setEditFormData({
-                          ...editFormData,
+                        setEditFormData((prev) => ({
+                          ...prev,
                           subcategory: subcategorySlug,
                           subcategoryName,
-                        });
+                        }));
                       }}
                       required={false}
                     />

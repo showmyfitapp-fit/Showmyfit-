@@ -11,6 +11,8 @@ select
 from public.profiles p
 where lower(p.email) in (
   lower('jsakhil70@gmail.com'),
+  lower('gauthamshowmyfit@gmail.com'),
+  lower('gipsonshowmyfit@gmail.com'),
 )
 on conflict (id) do update
   set auth_user_id = excluded.auth_user_id,

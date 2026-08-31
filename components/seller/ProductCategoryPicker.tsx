@@ -65,7 +65,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Category {required && <span className="text-red-500">*</span>}
         </label>
-        <div ref={categoryMenu.rootRef} className="relative z-30">
+        <div ref={categoryMenu.rootRef} className={`relative ${categoryOpen ? 'z-40' : 'z-10'}`}>
           <button
             ref={categoryMenu.triggerRef}
             type="button"
@@ -99,9 +99,9 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
                 <button
                   key={item.slug}
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onCategoryChange(item.slug);
-                    onSubcategoryChange('', '');
                     setCategoryOpen(false);
                   }}
                   className={`w-full px-4 py-3 text-left text-base hover:bg-gray-50 flex items-center gap-3 ${
@@ -122,7 +122,7 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Subcategory {required && <span className="text-red-500">*</span>}
           </label>
-          <div ref={subcategoryMenu.rootRef} className="relative z-30">
+          <div ref={subcategoryMenu.rootRef} className={`relative ${subcategoryOpen ? 'z-40' : 'z-10'}`}>
             <button
               ref={subcategoryMenu.triggerRef}
               type="button"
@@ -148,13 +148,14 @@ const ProductCategoryPicker: React.FC<ProductCategoryPickerProps> = ({
                 style={subcategoryMenu.menuStyle}
               >
                 {subcategories.map((item) => (
-                  <button
-                    key={item.slug}
-                    type="button"
-                    onClick={() => {
-                      onSubcategoryChange(item.slug, item.name);
-                      setSubcategoryOpen(false);
-                    }}
+                    <button
+                      key={item.slug}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        onSubcategoryChange(item.slug, item.name);
+                        setSubcategoryOpen(false);
+                      }}
                     className={`w-full px-4 py-3 text-left text-base hover:bg-gray-50 ${
                       subcategory === item.slug ? 'bg-blue-50 font-medium' : ''
                     }`}

@@ -18,7 +18,7 @@ import {
 import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
 import SelectDropdown from '@/components/ui/SelectDropdown';
 import { useCategories } from '@/hooks/useCategories';
-import { formatCategoryName } from '@/lib/categories/format';
+import { getCategorySpecificFields } from '@/lib/categories/categoryFields';
 import { buildProductSeoFields } from '@/utils/productSeo';
 
 interface Product {
@@ -81,106 +81,17 @@ const ProductManagementPage: React.FC = () => {
 
   const [categorySpecificData, setCategorySpecificData] = useState<Record<string, any>>({});
   const { topLevel: topLevelCategories } = useCategories();
+  const categoryFields = getCategorySpecificFields(
+    formData.category,
+    categorySpecificData,
+    formData.subcategoryName
+  );
 
   const statusOptions = [
     { value: 'active', label: 'Active', icon: '✅', color: 'text-green-600' },
     { value: 'inactive', label: 'Inactive', icon: '❌', color: 'text-red-600' },
     { value: 'draft', label: 'Draft', icon: '📝', color: 'text-yellow-600' }
   ];
-
-  // Dynamic form fields based on category
-  const getCategorySpecificFields = (category: string) => {
-    switch (category) {
-      case 'women':
-        return {
-          size: { type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'], label: 'Size' },
-          color: { type: 'text', label: 'Color' },
-          material: { type: 'text', label: 'Material' },
-          occasion: { type: 'select', options: ['Casual', 'Formal', 'Party', 'Wedding', 'Office'], label: 'Occasion' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' }
-        };
-      case 'men':
-        return {
-          size: { type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'], label: 'Size' },
-          color: { type: 'text', label: 'Color' },
-          material: { type: 'text', label: 'Material' },
-          occasion: { type: 'select', options: ['Casual', 'Formal', 'Business', 'Party', 'Sports'], label: 'Occasion' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' }
-        };
-      case 'footwear':
-        return {
-          size: { type: 'select', options: ['5', '6', '7', '8', '9', '10', '11', '12'], label: 'Size' },
-          color: { type: 'text', label: 'Color' },
-          material: { type: 'text', label: 'Material' },
-          heelHeight: { type: 'select', options: ['Flat', 'Low (1-2 inches)', 'Medium (2-3 inches)', 'High (3+ inches)'], label: 'Heel Height' },
-          closure: { type: 'select', options: ['Lace-up', 'Slip-on', 'Buckle', 'Velcro'], label: 'Closure' }
-        };
-      case 'jewellery':
-        return {
-          material: { type: 'select', options: ['Gold', 'Silver', 'Platinum', 'Diamond', 'Pearl', 'Gemstone'], label: 'Material' },
-          type: { type: 'select', options: ['Ring', 'Necklace', 'Earrings', 'Bracelet', 'Anklet'], label: 'Type' },
-          occasion: { type: 'select', options: ['Daily Wear', 'Formal', 'Party', 'Wedding'], label: 'Occasion' },
-          gender: { type: 'select', options: ['Women', 'Men', 'Unisex'], label: 'Gender' }
-        };
-      case 'lingerie':
-        return {
-          size: { type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], label: 'Size' },
-          color: { type: 'text', label: 'Color' },
-          material: { type: 'text', label: 'Material' },
-          type: { type: 'select', options: ['Bra', 'Panties', 'Lingerie Set', 'Sleepwear'], label: 'Type' }
-        };
-      case 'watches':
-        return {
-          brand: { type: 'text', label: 'Brand' },
-          type: { type: 'select', options: ['Analog', 'Digital', 'Smartwatch', 'Chronograph'], label: 'Type' },
-          material: { type: 'select', options: ['Stainless Steel', 'Leather', 'Rubber', 'Gold', 'Silver'], label: 'Band Material' },
-          waterResistance: { type: 'select', options: ['30m', '50m', '100m', '200m', 'Not Water Resistant'], label: 'Water Resistance' }
-        };
-      case 'kids':
-        return {
-          ageGroup: { type: 'select', options: ['0-2 years', '3-5 years', '6-8 years', '9-12 years', '13+ years'], label: 'Age Group' },
-          size: { type: 'select', options: ['XS', 'S', 'M', 'L', 'XL'], label: 'Size' },
-          gender: { type: 'select', options: ['Boys', 'Girls', 'Unisex'], label: 'Gender' },
-          occasion: { type: 'select', options: ['Casual', 'School', 'Party', 'Sports'], label: 'Occasion' }
-        };
-      case 'home-lifestyle':
-        return {
-          room: { type: 'select', options: ['Living Room', 'Bedroom', 'Kitchen', 'Bathroom', 'Dining Room'], label: 'Room' },
-          material: { type: 'text', label: 'Material' },
-          dimensions: { type: 'text', label: 'Dimensions (L x W x H)' },
-          color: { type: 'text', label: 'Color' }
-        };
-      case 'accessories':
-        return {
-          type: { type: 'select', options: ['Handbag', 'Wallet', 'Belt', 'Scarf', 'Hat', 'Sunglasses'], label: 'Type' },
-          material: { type: 'text', label: 'Material' },
-          color: { type: 'text', label: 'Color' },
-          gender: { type: 'select', options: ['Women', 'Men', 'Unisex'], label: 'Gender' }
-        };
-      case 'beauty':
-        return {
-          skinType: { type: 'select', options: ['Dry', 'Oily', 'Combination', 'Sensitive', 'Normal'], label: 'Skin Type' },
-          finish: { type: 'select', options: ['Matte', 'Dewy', 'Satin', 'Natural'], label: 'Finish' },
-          coverage: { type: 'select', options: ['Light', 'Medium', 'Full'], label: 'Coverage' },
-          shade: { type: 'text', label: 'Shade' }
-        };
-      case 'sportswear':
-        return {
-          activity: { type: 'select', options: ['Running', 'Gym', 'Yoga', 'Swimming', 'Cycling', 'Tennis'], label: 'Activity' },
-          size: { type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], label: 'Size' },
-          gender: { type: 'select', options: ['Men', 'Women', 'Unisex'], label: 'Gender' },
-          season: { type: 'select', options: ['Summer', 'Winter', 'All Season'], label: 'Season' }
-        };
-      case 'gifting-guide':
-        return {
-          occasion: { type: 'select', options: ['Birthday', 'Anniversary', 'Wedding', 'Holiday', 'Graduation'], label: 'Occasion' },
-          recipient: { type: 'select', options: ['Men', 'Women', 'Kids', 'Couples', 'Family'], label: 'Recipient' },
-          priceRange: { type: 'select', options: ['Under ₹1000', '₹1000-5000', '₹5000-10000', '₹10000+'], label: 'Price Range' }
-        };
-      default:
-        return {};
-    }
-  };
 
   // Load products
   const loadProducts = async () => {
@@ -578,25 +489,25 @@ const ProductManagementPage: React.FC = () => {
                       <p className="text-xs text-gray-500 mt-1">Enter MRP for discount calculation (optional)</p>
                     </div>
 
-                    <div className="md:col-span-2">
+                    <div>
                       <ProductCategoryPicker
                         category={formData.category}
                         subcategory={formData.subcategory || ''}
                         onCategoryChange={(categorySlug) => {
-                          setFormData({
-                            ...formData,
+                          setFormData((prev) => ({
+                            ...prev,
                             category: categorySlug,
                             subcategory: '',
                             subcategoryName: '',
-                          });
+                          }));
                           setCategorySpecificData({});
                         }}
                         onSubcategoryChange={(subcategorySlug, subcategoryName) => {
-                          setFormData({
-                            ...formData,
+                          setFormData((prev) => ({
+                            ...prev,
                             subcategory: subcategorySlug,
                             subcategoryName,
-                          });
+                          }));
                         }}
                       />
                     </div>
@@ -740,7 +651,7 @@ const ProductManagementPage: React.FC = () => {
                   </div>
 
                   {/* Category-Specific Fields */}
-                  {Object.keys(getCategorySpecificFields(formData.category)).length > 0 && (
+                  {Object.keys(categoryFields).length > 0 && (
                     <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <Tag className="w-5 h-5 mr-2 text-blue-600" />
@@ -748,8 +659,8 @@ const ProductManagementPage: React.FC = () => {
                         {topLevelCategories.find((c) => c.slug === formData.category)?.name} Specific Details
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {Object.entries(getCategorySpecificFields(formData.category)).map(([key, field]) => (
-                          <div key={key}>
+                        {Object.entries(categoryFields).map(([key, field]) => (
+                          <div key={key} className={field.type === 'multi-text' ? 'md:col-span-2' : ''}>
                             <label htmlFor={`category-${key}`} className="block text-sm font-medium text-gray-700 mb-2">
                               {field.label}
                             </label>
@@ -764,23 +675,32 @@ const ProductManagementPage: React.FC = () => {
                                   label: option,
                                 }))}
                               />
-                            ) : field.type === 'number' ? (
-                              <input
-                                id={`category-${key}`}
-                                type="number"
-                                value={categorySpecificData[key] || ''}
-                                onChange={(e) => setCategorySpecificData({ ...categorySpecificData, [key]: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder={`Enter ${field.label.toLowerCase()}`}
-                              />
-                            ) : field.type === 'date' ? (
-                              <input
-                                id={`category-${key}`}
-                                type="date"
-                                value={categorySpecificData[key] || ''}
-                                onChange={(e) => setCategorySpecificData({ ...categorySpecificData, [key]: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              />
+                            ) : field.type === 'multi-select' ? (
+                              <div className="flex flex-wrap gap-2">
+                                {(field.options || []).map((option: string) => {
+                                  const selected = (categorySpecificData[key] || []).includes(option);
+                                  return (
+                                    <button
+                                      key={option}
+                                      type="button"
+                                      onClick={() => {
+                                        const current = categorySpecificData[key] || [];
+                                        const next = selected
+                                          ? current.filter((value: string) => value !== option)
+                                          : [...current, option];
+                                        setCategorySpecificData({ ...categorySpecificData, [key]: next });
+                                      }}
+                                      className={`px-3 py-2 rounded-full text-sm font-medium border-2 ${
+                                        selected
+                                          ? 'bg-blue-500 text-white border-blue-500'
+                                          : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      {option}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             ) : (
                               <input
                                 id={`category-${key}`}
@@ -788,7 +708,7 @@ const ProductManagementPage: React.FC = () => {
                                 value={categorySpecificData[key] || ''}
                                 onChange={(e) => setCategorySpecificData({ ...categorySpecificData, [key]: e.target.value })}
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder={`Enter ${field.label.toLowerCase()}`}
+                                placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                               />
                             )}
                           </div>

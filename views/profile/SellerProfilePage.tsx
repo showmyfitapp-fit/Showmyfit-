@@ -2218,20 +2218,20 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             category={formData.category}
                             subcategory={formData.subcategory || ''}
                             onCategoryChange={(categorySlug) => {
-                              setFormData({
-                                ...formData,
+                              setFormData((prev) => ({
+                                ...prev,
                                 category: categorySlug,
                                 subcategory: '',
                                 subcategoryName: '',
-                              });
+                              }));
                               setCategorySpecificData({});
                             }}
                             onSubcategoryChange={(subcategorySlug, subcategoryName) => {
-                              setFormData({
-                                ...formData,
+                              setFormData((prev) => ({
+                                ...prev,
                                 subcategory: subcategorySlug,
                                 subcategoryName,
-                              });
+                              }));
                             }}
                           />
                         </div>
