@@ -4,6 +4,7 @@ const CACHE_MS = 15 * 60 * 1000;
 export interface PlaceName {
   name: string;
   city?: string;
+  pincode?: string;
 }
 
 function readCache(): PlaceName | null {
@@ -13,7 +14,7 @@ function readCache(): PlaceName | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PlaceName & { savedAt: number };
     if (Date.now() - parsed.savedAt > CACHE_MS) return null;
-    return { name: parsed.name, city: parsed.city };
+    return { name: parsed.name, city: parsed.city, pincode: parsed.pincode };
   } catch {
     return null;
   }
@@ -29,10 +30,24 @@ function formatPlace(data: Record<string, any>): PlaceName {
   const parts = [city && city !== locality ? city : locality || city, city]
     .filter(Boolean)
     .filter((value, index, list) => list.indexOf(value) === index);
+  const pincode = String(data.postcode || '').trim();
   return {
     name: parts.join(', ') || 'Your area',
     city: city || undefined,
+    pincode: pincode || undefined,
   };
+}
+
+export async function requestPincode(
+  latitude: number,
+  longitude: number
+): Promise<string | undefined> {
+  const response = await fetch(
+    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+  );
+  if (!response.ok) return undefined;
+  const data = (await response.json()) as { postcode?: string };
+  return String(data.postcode || '').trim() || undefined;
 }
 
 export function cachedPlaceName(): PlaceName | null {
@@ -41,26 +56,30 @@ export function cachedPlaceName(): PlaceName | null {
 
 export async function requestPlaceName(): Promise<PlaceName> {
   const cached = readCache();
-  if (cached) return cached;
 
-  const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Location is not supported'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: false,
-      timeout: 12000,
-      maximumAge: 300000,
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Location is not supported'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 0,
+      });
     });
-  });
 
-  const { latitude, longitude } = position.coords;
-  const response = await fetch(
-    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
-  );
-  if (!response.ok) throw new Error('Could not resolve location name');
-  const place = formatPlace(await response.json());
-  writeCache(place);
-  return place;
+    const { latitude, longitude } = position.coords;
+    const response = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+    );
+    if (!response.ok) throw new Error('Could not resolve location name');
+    const place = formatPlace(await response.json());
+    writeCache(place);
+    return place;
+  } catch (error) {
+    if (cached?.name) return cached;
+    throw error;
+  }
 }

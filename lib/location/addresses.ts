@@ -13,6 +13,7 @@ export interface SavedAddress {
   receiverName: string;
   receiverPhone: string;
   instructions: string;
+  pincode?: string;
 }
 
 type AddressRow = {

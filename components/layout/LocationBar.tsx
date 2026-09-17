@@ -15,7 +15,7 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
-import { cachedPlaceName, requestPlaceName } from '@/lib/location/place';
+import { cachedPlaceName, requestPincode, requestPlaceName } from '@/lib/location/place';
 import {
   addressMatchKey,
   insertUserAddress,
@@ -35,6 +35,7 @@ const SELECTED_KEY = 'smf_selected_location';
 interface SelectedLocation {
   type: 'gps' | 'saved' | 'search';
   name: string;
+  pincode?: string;
   addressId?: string;
 }
 
@@ -42,6 +43,8 @@ interface AreaResult {
   id: string;
   name: string;
   detail: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 type PickerView = 'list' | 'add';
@@ -68,15 +71,40 @@ function displayNameForAddress(address: SavedAddress) {
   return address.saveAs || address.area || address.line1 || address.label;
 }
 
+function extractPincode(value?: string) {
+  const match = value?.match(/\b(\d{6})\b/);
+  return match?.[1] || '';
+}
+
+function pincodeForAddress(address: SavedAddress) {
+  return address.pincode || extractPincode(address.area) || extractPincode(address.city);
+}
+
+function formatLocationName(name: string, pincode?: string) {
+  const pin = (pincode || '').trim();
+  if (!pin || name.includes(`(${pin})`)) return name;
+  return `${name} (${pin})`;
+}
+
 function formatAddress(address: SavedAddress) {
   return [address.line1, address.street, address.area, address.city]
     .filter(Boolean)
     .join(', ');
 }
 
+function withCachedPincode(addresses: SavedAddress[], cached: SavedAddress[]) {
+  const byId = new Map(cached.map((item) => [item.id, item.pincode]));
+  const byKey = new Map(cached.map((item) => [addressMatchKey(item), item.pincode]));
+  return addresses.map((address) => ({
+    ...address,
+    pincode: address.pincode || byId.get(address.id) || byKey.get(addressMatchKey(address)),
+  }));
+}
+
 const LocationBar: React.FC = () => {
   const { currentUser, loading: authLoading } = useAuth();
   const [place, setPlace] = useState(cachedPlaceName()?.name || '');
+  const [pincode, setPincode] = useState(cachedPlaceName()?.pincode || '');
   const [locBusy, setLocBusy] = useState(false);
   const [locError, setLocError] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -93,10 +121,10 @@ const LocationBar: React.FC = () => {
     const selected = readJson<SelectedLocation | null>(SELECTED_KEY, null);
     if (selected?.name) {
       setPlace(selected.name);
-      return;
+      setPincode(selected.pincode || extractPincode(selected.name));
+      if (selected.type === 'saved') return;
     }
 
-    if (cachedPlaceName()?.name) return;
     navigator.permissions
       ?.query({ name: 'geolocation' })
       .then((status) => {
@@ -112,7 +140,7 @@ const LocationBar: React.FC = () => {
     const loadAddresses = async () => {
       const authUserId = currentUser?.id;
       const cached = readJson<SavedAddress[]>(cacheKey(authUserId), []);
-      if (!cancelled) setAddresses(cached);
+      if (!cancelled) setAddresses(withCachedPincode(cached, cached));
 
       if (!authUserId) {
         return;
@@ -137,14 +165,15 @@ const LocationBar: React.FC = () => {
             receiverPhone: address.receiverPhone,
             instructions: address.instructions,
           });
-          merged.unshift(saved);
+          merged.unshift({ ...saved, pincode: address.pincode });
           existing.add(addressMatchKey(saved));
         }
 
         if (guest.length) localStorage.removeItem(GUEST_ADDRESSES_KEY);
         if (!cancelled) {
-          setAddresses(merged);
-          writeJson(cacheKey(authUserId), merged);
+          const next = withCachedPincode(merged, cached);
+          setAddresses(next);
+          writeJson(cacheKey(authUserId), next);
         }
       } catch {
         if (!cancelled) {
@@ -165,7 +194,12 @@ const LocationBar: React.FC = () => {
     try {
       const result = await requestPlaceName();
       setPlace(result.name);
-      writeJson(SELECTED_KEY, { type: 'gps', name: result.name } satisfies SelectedLocation);
+      setPincode(result.pincode || '');
+      writeJson(SELECTED_KEY, {
+        type: 'gps',
+        name: result.name,
+        pincode: result.pincode,
+      } satisfies SelectedLocation);
       if (closePicker) setPickerOpen(false);
     } catch {
       setLocError('Allow location access to show your area');
@@ -181,6 +215,7 @@ const LocationBar: React.FC = () => {
 
   const selectLocation = (next: SelectedLocation) => {
     setPlace(next.name);
+    setPincode(next.pincode || extractPincode(next.name));
     setLocError('');
     writeJson(SELECTED_KEY, next);
     setPickerOpen(false);
@@ -192,7 +227,10 @@ const LocationBar: React.FC = () => {
     try {
       let stored: SavedAddress;
       if (currentUser?.id) {
-        stored = await insertUserAddress(currentUser.id, currentUser.uid, address);
+        stored = {
+          ...(await insertUserAddress(currentUser.id, currentUser.uid, address)),
+          pincode: address.pincode,
+        };
       } else {
         stored = { ...address, id: address.id || crypto.randomUUID() };
       }
@@ -204,6 +242,7 @@ const LocationBar: React.FC = () => {
         type: 'saved',
         name: displayNameForAddress(stored),
         addressId: stored.id,
+        pincode: pincodeForAddress(stored),
       });
     } catch {
       setSaveError(
@@ -226,7 +265,9 @@ const LocationBar: React.FC = () => {
         >
           <MapPin className="w-3.5 h-3.5 shrink-0 text-orange-600" />
           {place ? (
-            <span className="font-semibold text-neutral-800 truncate">{place}</span>
+            <span className="font-semibold text-neutral-800 truncate">
+              {formatLocationName(place, pincode)}
+            </span>
           ) : (
             <span className="font-medium text-neutral-500 truncate">
               {locBusy ? 'Finding your area…' : locError || 'Allow location to show your area'}
@@ -256,16 +297,30 @@ const LocationBar: React.FC = () => {
         signedIn={Boolean(currentUser)}
         addresses={addresses}
         selectedName={place}
+        selectedPincode={pincode}
         onClose={() => setPickerOpen(false)}
         onUseCurrentLocation={() => void enableLocation(true)}
-        onSelectSearch={(result) =>
-          selectLocation({ type: 'search', name: result.name })
-        }
+        onSelectSearch={(result) => {
+          selectLocation({ type: 'search', name: result.name });
+          if (result.latitude == null || result.longitude == null) return;
+          void requestPincode(result.latitude, result.longitude)
+            .then((pin) => {
+              if (!pin) return;
+              setPincode(pin);
+              writeJson(SELECTED_KEY, {
+                type: 'search',
+                name: result.name,
+                pincode: pin,
+              } satisfies SelectedLocation);
+            })
+            .catch(() => undefined);
+        }}
         onSelectAddress={(address) =>
           selectLocation({
             type: 'saved',
             name: displayNameForAddress(address),
             addressId: address.id,
+            pincode: pincodeForAddress(address),
           })
         }
         onSaveAddress={(address) => void saveAddress(address)}
@@ -283,6 +338,7 @@ interface LocationPickerProps {
   signedIn: boolean;
   addresses: SavedAddress[];
   selectedName: string;
+  selectedPincode: string;
   onClose: () => void;
   onUseCurrentLocation: () => void;
   onSelectSearch: (result: AreaResult) => void;
@@ -299,6 +355,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   signedIn,
   addresses,
   selectedName,
+  selectedPincode,
   onClose,
   onUseCurrentLocation,
   onSelectSearch,
@@ -357,6 +414,8 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
             name: string;
             admin1?: string;
             country?: string;
+            latitude?: number;
+            longitude?: number;
           }>;
         };
         setResults(
@@ -364,6 +423,8 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
             id: String(item.id),
             name: item.name,
             detail: [item.admin1, item.country].filter(Boolean).join(', '),
+            latitude: item.latitude,
+            longitude: item.longitude,
           }))
         );
       } catch (error) {
@@ -548,7 +609,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
                               )}
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-neutral-500">
-                              {formatAddress(address)}
+                              {formatLocationName(formatAddress(address), pincodeForAddress(address))}
                             </span>
                           </span>
                         </button>
@@ -562,6 +623,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         ) : (
           <AddAddressForm
             areaHint={selectedName}
+            pincodeHint={selectedPincode}
             saving={savingAddress}
             saveError={saveError}
             signedIn={signedIn}
@@ -584,12 +646,13 @@ const AddressIcon: React.FC<{ label: AddressLabel }> = ({ label }) => {
 
 const AddAddressForm: React.FC<{
   areaHint: string;
+  pincodeHint: string;
   saving: boolean;
   saveError: string;
   signedIn: boolean;
   onChangeArea: () => void;
   onSave: (address: Omit<SavedAddress, 'id'>) => void;
-}> = ({ areaHint, saving, saveError, signedIn, onChangeArea, onSave }) => {
+}> = ({ areaHint, pincodeHint, saving, saveError, signedIn, onChangeArea, onSave }) => {
   const { currentUser, userData } = useAuth();
   const accountName = userData?.displayName || currentUser?.displayName || '';
   const accountPhone = userData?.phone || currentUser?.phoneNumber || '';
@@ -598,6 +661,7 @@ const AddAddressForm: React.FC<{
   const [line1, setLine1] = useState('');
   const [street, setStreet] = useState('');
   const [saveAs, setSaveAs] = useState('');
+  const [pincode, setPincode] = useState(pincodeHint);
   const [instructions, setInstructions] = useState('');
 
   const canSave = Boolean(line1.trim() && saveAs.trim());
@@ -615,6 +679,7 @@ const AddAddressForm: React.FC<{
           saveAs: saveAs.trim(),
           area: areaHint || saveAs.trim(),
           city: '',
+          pincode: pincode.trim() || extractPincode(areaHint) || undefined,
           receiverName: useAccount ? accountName : '',
           receiverPhone: useAccount ? accountPhone : '',
           instructions: instructions.trim(),
@@ -693,11 +758,21 @@ const AddAddressForm: React.FC<{
             placeholder="Save address as *"
             className="mt-3 h-12 w-full rounded-xl border border-neutral-200 px-3 text-sm outline-none focus:border-orange-400"
           />
+          <input
+            value={pincode}
+            onChange={(event) => setPincode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputMode="numeric"
+            placeholder="Pincode"
+            className="mt-3 h-12 w-full rounded-xl border border-neutral-200 px-3 text-sm outline-none focus:border-orange-400"
+          />
 
           <div className="mt-3 flex items-stretch gap-2">
             <div className="min-w-0 flex-1 rounded-xl border border-neutral-200 px-3 py-2.5">
               <p className="truncate text-sm text-neutral-700">
-                {areaHint || 'Choose an area from search or current location'}
+                {formatLocationName(
+                  areaHint || 'Choose an area from search or current location',
+                  pincodeHint
+                )}
               </p>
             </div>
             <button
