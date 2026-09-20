@@ -23,6 +23,7 @@ import ProductSEO from '@/components/seo/ProductSEO';
 import Breadcrumbs from '@/components/common/Breadcrumbs';
 import { useCategories } from '@/hooks/useCategories';
 import { getProductPath } from '@/utils/productUrls';
+import { googleMapsApiKey } from '@/lib/location/googleMaps';
 
 interface Product {
   id: string;
@@ -740,7 +741,7 @@ const ProductDetailPage: React.FC = () => {
                   <div className="flex items-center gap-4">
                     {/* Circular Map Preview */}
                     <div className="relative w-24 h-24 flex-shrink-0 rounded-full overflow-hidden border-2 border-gray-100 shadow-inner">
-                      {seller.location && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
+                      {seller.location ? (
                         // Using styling to force the map component to fit the circle
                         <div className="absolute inset-0 pointer-events-none">
                           <iframe
@@ -748,7 +749,7 @@ const ProductDetailPage: React.FC = () => {
                             height="100%"
                             frameBorder="0"
                             style={{ border: 0, opacity: 0.8 }}
-                            src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&q=${seller.location.lat},${seller.location.lng}&zoom=14`}
+                            src={`https://www.google.com/maps/embed/v1/place?key=${googleMapsApiKey()}&q=${seller.location.lat},${seller.location.lng}&zoom=14`}
                             allowFullScreen
                           ></iframe>
                         </div>

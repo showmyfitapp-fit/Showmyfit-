@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, Navigation } from 'lucide-react';
+import { googleMapsApiKey } from '@/lib/location/googleMaps';
 
 interface Location {
   lat: number;
@@ -50,10 +51,8 @@ const GoogleMapLocation: React.FC<GoogleMapLocationProps> = ({
         return;
       }
 
-      const apiKey = 'AIzaSyCeyIcYq60rZLMaXRlnU0UwKzDQaonuVwI';
-
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey()}&libraries=places`;
       script.async = true;
       script.defer = true;
       script.onload = () => setIsMapLoaded(true);

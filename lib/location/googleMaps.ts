@@ -1,4 +1,6 @@
-const FALLBACK_KEY = 'AIzaSyCeyIcYq60rZLMaXRlnU0UwKzDQaonuVwI';
+/// <reference types="google.maps" />
+
+const FALLBACK_KEY = 'AIzaSyBZIJybunE12Dll1THaT_Pnt0-B5gBqJiw';
 
 export function googleMapsApiKey() {
   return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || FALLBACK_KEY;
