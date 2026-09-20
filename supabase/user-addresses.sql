@@ -14,6 +14,9 @@ create table if not exists public.user_addresses (
   receiver_name text not null default '',
   receiver_phone text not null default '',
   instructions text not null default '',
+  latitude double precision,
+  longitude double precision,
+  map_address text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,6 +15,13 @@ import API_ENDPOINTS from '../config/api';
 import OptimizedImage from '../components/common/OptimizedImage';
 import { getProductPath } from '@/utils/productUrls';
 import { getUserLocation } from '@/utils/distance';
+import LocationPicker from '@/components/location/LocationPicker';
+import { useLocationSelection } from '@/hooks/useLocationSelection';
+import {
+  displayNameForAddress,
+  formatDeliveryAddress,
+  formatLocationName,
+} from '@/lib/location/selection';
 import {
   computeDistanceAndEta,
   createOrdersFromCart,
@@ -37,6 +44,7 @@ const CartPage: React.FC = () => {
   } = useCart();
 
   const { currentUser, userData } = useAuth();
+  const location = useLocationSelection();
   const router = useRouter();
   const [showLastAdded, setShowLastAdded] = useState(false);
   const [shopDetails, setShopDetails] = useState<{ [key: string]: any }>({});
@@ -45,6 +53,7 @@ const CartPage: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const promptedLocationRef = useRef(false);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -52,8 +61,22 @@ const CartPage: React.FC = () => {
   }, [userData?.phone]);
 
   useEffect(() => {
+    if (customerPhone || !location.selectedAddress?.receiverPhone) return;
+    setCustomerPhone(location.selectedAddress.receiverPhone);
+  }, [customerPhone, location.selectedAddress?.receiverPhone]);
+
+  useEffect(() => {
     getUserLocation().then(setCustomerLocation);
   }, []);
+
+  useEffect(() => {
+    if (promptedLocationRef.current) return;
+    if (cartItems.length === 0 || !location.addressesReady || location.hasSelectedSavedAddress) {
+      return;
+    }
+    promptedLocationRef.current = true;
+    location.setPickerOpen(true);
+  }, [cartItems.length, location.addressesReady, location.hasSelectedSavedAddress, location.setPickerOpen]);
 
   // Fetch shop details for cart items
   useEffect(() => {
@@ -108,9 +131,14 @@ const CartPage: React.FC = () => {
       return;
     }
 
-    const phone = customerPhone.trim() || userData?.phone || '';
+    const phone = customerPhone.trim() || userData?.phone || location.selectedAddress?.receiverPhone || '';
     if (!phone || phone.length < 10) {
       alert('Please enter a valid phone number for delivery updates and OTP.');
+      return;
+    }
+
+    if (!location.hasSelectedSavedAddress) {
+      location.setPickerOpen(true);
       return;
     }
 
@@ -200,7 +228,17 @@ const CartPage: React.FC = () => {
                 customerName: currentUser?.displayName || userData?.displayName || 'Customer',
                 customerEmail: currentUser?.email || userData?.email || '',
                 customerPhone: phone,
-                customerAddress: userData?.address,
+                customerAddress: location.selectedAddress
+                  ? formatDeliveryAddress(location.selectedAddress)
+                  : userData?.address,
+                customerLocation:
+                  location.selectedAddress?.latitude != null &&
+                  location.selectedAddress?.longitude != null
+                    ? {
+                        lat: location.selectedAddress.latitude,
+                        lng: location.selectedAddress.longitude,
+                      }
+                    : null,
                 paymentId: response.razorpay_payment_id,
                 razorpayOrderId: response.razorpay_order_id,
               });
@@ -519,6 +557,55 @@ const CartPage: React.FC = () => {
 
                 <div className="space-y-4 mb-6">
                   <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                        Delivery location
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => location.setPickerOpen(true)}
+                        className="text-xs font-bold text-purple-600 hover:text-purple-700"
+                      >
+                        {location.hasSelectedSavedAddress ? 'Change' : 'Add'}
+                      </button>
+                    </div>
+                    {location.selectedAddress ? (
+                      <button
+                        type="button"
+                        onClick={() => location.setPickerOpen(true)}
+                        className="w-full text-left px-4 py-3 border border-gray-200 rounded-xl hover:border-purple-200"
+                      >
+                        <p className="text-sm font-bold text-gray-900">
+                          {displayNameForAddress(location.selectedAddress)}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {formatLocationName(
+                            formatDeliveryAddress(location.selectedAddress),
+                            location.selectedAddress.pincode
+                          )}
+                        </p>
+                        {location.selectedAddress.latitude != null &&
+                          location.selectedAddress.longitude != null && (
+                            <p className="mt-1 text-[11px] font-semibold text-purple-700">
+                              Map pin saved
+                            </p>
+                          )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => location.setPickerOpen(true)}
+                        className="w-full px-4 py-3 border border-dashed border-purple-200 bg-purple-50/70 rounded-xl text-left"
+                      >
+                        <p className="text-sm font-semibold text-purple-800">Add a delivery address</p>
+                        <p className="mt-1 text-xs text-purple-700/80">
+                          Choose a saved address or add one before checkout.
+                        </p>
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
                       Phone for delivery OTP (WhatsApp)
                     </label>
@@ -605,6 +692,23 @@ const CartPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        <LocationPicker
+          open={location.pickerOpen}
+          locBusy={location.locBusy}
+          locError={location.locError}
+          saveError={location.saveError}
+          savingAddress={location.savingAddress}
+          signedIn={location.signedIn}
+          addresses={location.addresses}
+          selectedName={location.place}
+          selectedPincode={location.pincode}
+          onClose={() => location.setPickerOpen(false)}
+          onUseCurrentLocation={() => void location.enableLocation(true)}
+          onSelectSearch={location.selectSearch}
+          onSelectAddress={location.selectAddress}
+          onSaveAddress={(address) => void location.saveAddress(address)}
+        />
 
         {/* Recently Added Section */}
         {showLastAdded && lastAddedProducts.length > 0 && cartItems.length > 0 && (

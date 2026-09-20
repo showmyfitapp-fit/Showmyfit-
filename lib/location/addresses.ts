@@ -14,6 +14,9 @@ export interface SavedAddress {
   receiverPhone: string;
   instructions: string;
   pincode?: string;
+  latitude?: number;
+  longitude?: number;
+  mapAddress?: string;
 }
 
 type AddressRow = {
@@ -27,11 +30,23 @@ type AddressRow = {
   receiver_name: string | null;
   receiver_phone: string | null;
   instructions: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  map_address?: string | null;
 };
+
+const BASE_COLUMNS =
+  'id, label, line1, street, save_as, area, city, receiver_name, receiver_phone, instructions';
+const ADDRESS_COLUMNS = `${BASE_COLUMNS}, latitude, longitude, map_address`;
 
 function asLabel(value: string | null): AddressLabel {
   if (value === 'Office' || value === 'Other' || value === 'House') return value;
   return 'House';
+}
+
+function asCoord(value?: number | string | null) {
+  const next = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(next) ? next : undefined;
 }
 
 function mapRow(row: AddressRow): SavedAddress {
@@ -46,6 +61,9 @@ function mapRow(row: AddressRow): SavedAddress {
     receiverName: row.receiver_name || '',
     receiverPhone: row.receiver_phone || '',
     instructions: row.instructions || '',
+    latitude: asCoord(row.latitude),
+    longitude: asCoord(row.longitude),
+    mapAddress: row.map_address || undefined,
   };
 }
 
@@ -62,21 +80,38 @@ function toInsert(address: Omit<SavedAddress, 'id'>, authUserId: string, userId:
     receiver_name: address.receiverName,
     receiver_phone: address.receiverPhone,
     instructions: address.instructions,
+    latitude: address.latitude ?? null,
+    longitude: address.longitude ?? null,
+    map_address: address.mapAddress || null,
     updated_at: new Date().toISOString(),
   };
 }
 
+function missingLocationColumn(error: { message?: string } | null) {
+  const message = error?.message || '';
+  return /latitude|longitude|map_address|column/i.test(message);
+}
+
 export async function listUserAddresses(authUserId: string): Promise<SavedAddress[]> {
-  const { data, error } = await getSupabaseBrowserClient()
+  const client = getSupabaseBrowserClient();
+  const withCoords = await client
     .from('user_addresses')
-    .select(
-      'id, label, line1, street, save_as, area, city, receiver_name, receiver_phone, instructions'
-    )
+    .select(ADDRESS_COLUMNS)
     .eq('auth_user_id', authUserId)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return (data || []).map((row) => mapRow(row as AddressRow));
+  if (!withCoords.error) {
+    return (withCoords.data || []).map((row) => mapRow(row as AddressRow));
+  }
+
+  const fallback = await client
+    .from('user_addresses')
+    .select(BASE_COLUMNS)
+    .eq('auth_user_id', authUserId)
+    .order('created_at', { ascending: false });
+
+  if (fallback.error) throw fallback.error;
+  return (fallback.data || []).map((row) => mapRow(row as AddressRow));
 }
 
 export async function insertUserAddress(
@@ -84,16 +119,36 @@ export async function insertUserAddress(
   userId: string,
   address: Omit<SavedAddress, 'id'>
 ): Promise<SavedAddress> {
-  const { data, error } = await getSupabaseBrowserClient()
+  const client = getSupabaseBrowserClient();
+  const payload = toInsert(address, authUserId, userId);
+  const withCoords = await client
     .from('user_addresses')
-    .insert(toInsert(address, authUserId, userId))
-    .select(
-      'id, label, line1, street, save_as, area, city, receiver_name, receiver_phone, instructions'
-    )
+    .insert(payload)
+    .select(ADDRESS_COLUMNS)
     .single();
 
-  if (error) throw error;
-  return mapRow(data as AddressRow);
+  if (!withCoords.error) {
+    return mapRow(withCoords.data as AddressRow);
+  }
+
+  if (!missingLocationColumn(withCoords.error)) {
+    throw withCoords.error;
+  }
+
+  const { latitude: _lat, longitude: _lng, map_address: _map, ...base } = payload;
+  const fallback = await client
+    .from('user_addresses')
+    .insert(base)
+    .select(BASE_COLUMNS)
+    .single();
+
+  if (fallback.error) throw fallback.error;
+  return {
+    ...mapRow(fallback.data as AddressRow),
+    latitude: address.latitude,
+    longitude: address.longitude,
+    mapAddress: address.mapAddress,
+  };
 }
 
 export function addressMatchKey(address: Pick<SavedAddress, 'saveAs' | 'line1' | 'area'>) {

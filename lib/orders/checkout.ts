@@ -48,13 +48,16 @@ export async function createOrdersFromCart(params: {
   customerEmail: string;
   customerPhone: string;
   customerAddress?: string;
+  customerLocation?: { lat: number; lng: number } | null;
   paymentId: string;
   razorpayOrderId: string;
 }) {
-  const rawLocation = await getUserLocation();
-  const customerLocation = rawLocation
-    ? { lat: rawLocation.latitude, lng: rawLocation.longitude }
-    : null;
+  const rawLocation =
+    params.customerLocation ||
+    (await getUserLocation().then((point) =>
+      point ? { lat: point.latitude, lng: point.longitude } : null
+    ));
+  const customerLocation = rawLocation;
   const orderGroupId = `grp_${Date.now()}`;
   const groups = groupCartBySeller(params.cartItems);
   const createdOrders: Array<{ id: string; orderNumber: string; sellerId: string }> = [];
