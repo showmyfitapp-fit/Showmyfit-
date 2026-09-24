@@ -74,6 +74,7 @@ export interface OrderRecord {
   packedAt?: Date | null;
   outForDeliveryAt?: Date | null;
   deliveredAt?: Date | null;
+  cancelledAt?: Date | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -92,4 +93,10 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   'accepted',
   'packed',
   'out_for_delivery',
+];
+
+export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = [
+  'placed',
+  'accepted',
+  'packed',
 ];

@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrders } from '@/lib/supabase/admin';
+import { cancelOrder, fetchOrderById, updateOrderStatus as persistOrderStatus } from '@/lib/orders';
+import { createPickupJob } from '@/lib/delivery';
+import type { OrderStatus } from '@/lib/orders/types';
 import {
   ShoppingBag,
   Search,
@@ -118,19 +121,27 @@ const OrderManagementPage: React.FC = () => {
     loadOrders();
   }, []);
 
-  // Update order status
   const updateOrderStatus = async (orderId: string, status: string) => {
     try {
-      // Orders are not in Supabase yet — update local UI only.
+      const next = status as OrderStatus;
+      if (next === 'cancelled') {
+        await cancelOrder(orderId, { force: true });
+      } else {
+        await persistOrderStatus(orderId, next);
+        if (next === 'packed') {
+          const order = await fetchOrderById(orderId);
+          if (order) await createPickupJob({ ...order, status: next });
+        }
+      }
       setOrders(orders.map(order =>
-        order.id === orderId ? { ...order, status: status as any, updatedAt: new Date() } : order
+        order.id === orderId ? { ...order, status: next, updatedAt: new Date() } : order
       ));
-      setMessage(`Order ${status} successfully!`);
+      setMessage(`Order ${next} saved`);
       setIsSuccess(true);
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
       console.error('Error updating order status:', error);
-      setMessage('Error updating order status');
+      setMessage(error instanceof Error ? error.message : 'Error updating order status');
       setIsSuccess(false);
     }
   };
@@ -210,15 +221,15 @@ const OrderManagementPage: React.FC = () => {
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
                 <div className="text-2xl font-bold text-blue-600">
-                  {orders.filter(o => o.status === 'shipped').length}
+                  {orders.filter(o => o.status === 'out_for_delivery' || o.status === 'shipped').length}
                 </div>
-                <div className="text-sm text-gray-600">Shipped</div>
+                <div className="text-sm text-gray-600">Out for delivery</div>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
                 <div className="text-2xl font-bold text-yellow-600">
-                  {orders.filter(o => o.status === 'pending').length}
+                  {orders.filter(o => o.status === 'placed' || o.status === 'pending').length}
                 </div>
-                <div className="text-sm text-gray-600">Pending</div>
+                <div className="text-sm text-gray-600">Placed</div>
               </div>
             </div>
           </div>
@@ -327,31 +338,34 @@ const OrderManagementPage: React.FC = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {order.status === 'pending' && (
+                          {(order.status === 'placed' || order.status === 'pending') && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, 'confirmed')}
+                              onClick={() => updateOrderStatus(order.id, 'accepted')}
                               variant="primary"
                               size="sm"
                             >
                               <CheckCircle className="w-4 h-4" />
                             </Button>
                           )}
-                          {order.status === 'confirmed' && (
+                          {order.status === 'accepted' && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, 'shipped')}
+                              onClick={() => updateOrderStatus(order.id, 'packed')}
                               variant="primary"
                               size="sm"
                             >
-                              <Truck className="w-4 h-4" />
+                              <Package className="w-4 h-4" />
                             </Button>
                           )}
-                          {order.status === 'shipped' && (
+                          {order.status === 'packed' && (
+                            <span className="text-xs text-gray-500">Waiting for rider pickup</span>
+                          )}
+                          {['placed', 'accepted', 'packed', 'pending', 'confirmed'].includes(order.status) && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, 'delivered')}
-                              variant="primary"
+                              onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                              variant="outline"
                               size="sm"
                             >
-                              <CheckCircle className="w-4 h-4" />
+                              <XCircle className="w-4 h-4" />
                             </Button>
                           )}
                         </div>

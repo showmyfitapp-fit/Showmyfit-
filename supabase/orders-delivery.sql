@@ -42,6 +42,7 @@ create table if not exists public.orders (
   packed_at timestamptz,
   out_for_delivery_at timestamptz,
   delivered_at timestamptz,
+  cancelled_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -119,6 +120,7 @@ alter table public.notifications enable row level security;
 alter table public.delivery_partners enable row level security;
 alter table public.delivery_jobs enable row level security;
 
+-- Temporary open access. Replace these by running supabase/orders-delivery-rls.sql.
 drop policy if exists orders_authenticated_all on public.orders;
 create policy orders_authenticated_all on public.orders
   for all to authenticated using (true) with check (true);

@@ -1,4 +1,5 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { requestOrderAlert } from '@/lib/orders/alerts';
 import {
   fetchOrderById,
   markOutForDelivery,
@@ -54,16 +55,6 @@ function mapPartner(row: Record<string, any>): DeliveryPartner {
     isOnline: Boolean(row.is_online),
     lastOnlineAt: toDate(row.last_online_at),
   };
-}
-
-function partnerUserIds(partners: Array<{ id: string; authUserId?: string }>): string[] {
-  return Array.from(
-    new Set(
-      partners.flatMap((partner) =>
-        [partner.id, partner.authUserId].filter(Boolean).map(String)
-      )
-    )
-  );
 }
 
 export async function getDeliveryPartner(userId: string): Promise<DeliveryPartner | null> {
@@ -124,33 +115,6 @@ export async function enableDeliveryPartner(params: {
   if (error) throw error;
 }
 
-async function notifyUsers(
-  userIds: string[],
-  payload: {
-    type: string;
-    title: string;
-    message: string;
-    orderId: string;
-    orderNumber: string;
-    items?: DeliveryJob['items'];
-  }
-) {
-  if (!userIds.length) return;
-  const { error } = await db().from('notifications').insert(
-    userIds.map((userId) => ({
-      user_id: userId,
-      read: false,
-      type: payload.type,
-      title: payload.title,
-      message: payload.message,
-      order_id: payload.orderId,
-      order_number: payload.orderNumber,
-      items: payload.items || [],
-    }))
-  );
-  if (error) throw error;
-}
-
 export async function createPickupJob(order: OrderRecord): Promise<string> {
   if (!order.id) throw new Error('Order id is required');
 
@@ -188,19 +152,7 @@ export async function createPickupJob(order: OrderRecord): Promise<string> {
   });
   if (error) throw error;
 
-  const partners = (await fetchDeliveryPartners()).filter((partner) => partner.isOnline);
-  await notifyUsers(
-    partnerUserIds(partners),
-    {
-      type: 'delivery_pickup',
-      title: 'New pickup ready',
-      message: `Pickup ${order.sellerName} → drop ${order.customerAddress || 'customer'}. ${formatProductLine(order.items)}`,
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      items: order.items,
-    }
-  );
-
+  await requestOrderAlert('pickup_ready', order.id);
   return pickupOtp;
 }
 
@@ -243,7 +195,7 @@ export async function acceptDeliveryJob(
     throw new Error('Go online to accept deliveries');
   }
 
-  const { error: updateError } = await db()
+  const { data: accepted, error: updateError } = await db()
     .from('delivery_jobs')
     .update({
       status: 'assigned',
@@ -251,14 +203,21 @@ export async function acceptDeliveryJob(
       delivery_partner_name: partnerName,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', jobId);
+    .eq('id', jobId)
+    .eq('status', 'available')
+    .select('id')
+    .maybeSingle();
   if (updateError) throw updateError;
+  if (!accepted) {
+    throw new Error('This pickup was already accepted by another rider');
+  }
 
   if (job.orderId) {
     await updateOrderFields(job.orderId, {
       deliveryPartnerId: partnerId,
       deliveryPartnerName: partnerName,
     });
+    await requestOrderAlert('job_assigned', job.orderId);
   }
 }
 
@@ -292,6 +251,7 @@ export async function verifyPickupOtp(jobId: string, enteredOtp: string): Promis
     if (order?.status === 'packed') {
       await markOutForDelivery(job.orderId);
     }
+    await requestOrderAlert('picked_up', job.orderId);
   }
 
   return true;
@@ -317,6 +277,7 @@ export async function completeDeliveryJob(jobId: string, customerOtp: string): P
     })
     .eq('id', jobId);
   if (updateError) throw updateError;
+  await requestOrderAlert('delivered', String(data.order_id));
   return true;
 }
 

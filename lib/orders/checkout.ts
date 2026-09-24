@@ -6,7 +6,8 @@ import {
   groupCartBySeller,
   type SellerShopInfo,
 } from './helpers';
-import { createOrder, createSellerNotification, notifyDeliveryPartnersOfOrder } from './store';
+import { requestOrderAlert } from './alerts';
+import { createOrder } from './store';
 
 export async function fetchSellerShopInfo(sellerId: string): Promise<SellerShopInfo> {
   const client = getSupabaseBrowserClient();
@@ -83,29 +84,7 @@ export async function createOrdersFromCart(params: {
     const orderId = await createOrder(draft);
     createdOrders.push({ id: orderId, orderNumber: draft.orderNumber, sellerId });
 
-    const productLine = draft.items
-      .map((item) => `${item.productName} × ${item.quantity}`)
-      .join(', ');
-
-    const sellerMessage = `${params.customerName} placed order ${draft.orderNumber} for ₹${draft.total.toLocaleString()}. Listed products: ${productLine}. Pack within 30 minutes.`;
-
-    await createSellerNotification({
-      sellerId,
-      orderId,
-      orderNumber: draft.orderNumber,
-      customerName: params.customerName,
-      total: draft.total,
-      items: draft.items,
-      message: sellerMessage,
-    });
-
-    await notifyDeliveryPartnersOfOrder({
-      orderId,
-      orderNumber: draft.orderNumber,
-      sellerName: draft.sellerName,
-      items: draft.items,
-      message: `New order ${draft.orderNumber} at ${draft.sellerName}. ${productLine}`,
-    });
+    await requestOrderAlert('new_order', orderId);
   }
 
   return createdOrders;

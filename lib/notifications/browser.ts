@@ -39,6 +39,9 @@ export function showSystemNotification(params: {
 }
 
 export function notificationTargetUrl(type?: string): string {
-  if (type === 'delivery_pickup' || type === 'new_order_delivery') return '/delivery';
+  if (type === 'delivery_pickup' || type === 'new_order_delivery' || type === 'pickup_ready') {
+    return '/delivery';
+  }
+  if (type === 'cancelled') return '/profile';
   return '/seller/orders';
 }

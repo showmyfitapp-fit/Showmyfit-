@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import { fetchCustomerOrders, ORDER_STATUS_LABELS, type OrderRecord } from '@/lib/orders';
+import { subscribeTable } from '@/lib/realtime/subscribe';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -42,10 +43,19 @@ const CustomerOrdersPage: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetchCustomerOrders(currentUser.uid)
-      .then(setOrders)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    const load = () => {
+      fetchCustomerOrders(currentUser.uid)
+        .then(setOrders)
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    };
+    load();
+    return subscribeTable({
+      channel: `customer-orders-${currentUser.uid}`,
+      table: 'orders',
+      filter: `user_id=eq.${currentUser.uid}`,
+      onChange: load,
+    });
   }, [currentUser]);
 
   if (!currentUser) {

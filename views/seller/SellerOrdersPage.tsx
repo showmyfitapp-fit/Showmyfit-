@@ -9,22 +9,24 @@ import {
   Clock,
   MapPin,
   Truck,
-  CheckCircle,
   ArrowLeft,
-  MessageCircle,
   KeyRound,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import {
+  cancelOrder,
+  CANCELLABLE_ORDER_STATUSES,
   fetchSellerOrders,
   markNotificationsRead,
-  markOutForDelivery,
   updateOrderStatus,
-  verifyDeliveryOtp,
 } from '@/lib/orders';
 import { createPickupJob } from '@/lib/delivery';
-import { buildDeliveryOtpWhatsAppUrl } from '@/lib/orders/helpers';
+import { subscribeTable } from '@/lib/realtime/subscribe';
+import {
+  browserNotificationPermission,
+  requestBrowserNotificationPermission,
+} from '@/lib/notifications/browser';
 import { ORDER_STATUS_LABELS, type OrderRecord, type OrderStatus } from '@/lib/orders/types';
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
@@ -35,27 +37,43 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 const SellerOrdersPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
   const router = useRouter();
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [otpInput, setOtpInput] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [alertPermission, setAlertPermission] = useState<NotificationPermission>('default');
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!currentUser) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const data = await fetchSellerOrders(currentUser.uid);
       setOrders(data);
-      await markNotificationsRead(currentUser.uid);
+      if (!silent) await markNotificationsRead(currentUser.uid);
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (userData?.role === 'shop' || userData?.role === 'admin') load();
+    setFocusOrderId(new URLSearchParams(window.location.search).get('order'));
+    setAlertPermission(browserNotificationPermission());
+  }, []);
+
+  useEffect(() => {
+    if (userData?.role !== 'shop' && userData?.role !== 'admin') return;
+    void load();
+    if (!currentUser?.uid) return;
+    return subscribeTable({
+      channel: `seller-orders-${currentUser.uid}`,
+      table: 'orders',
+      filter: `seller_id=eq.${currentUser.uid}`,
+      onChange: () => {
+        void load(true);
+      },
+    });
   }, [currentUser, userData?.role]);
 
   const handleAdvance = async (order: OrderRecord) => {
@@ -76,31 +94,15 @@ const SellerOrdersPage: React.FC = () => {
     await load();
   };
 
-  const handleOutForDelivery = async (order: OrderRecord) => {
+  const handleCancel = async (order: OrderRecord) => {
     if (!order.id) return;
-    const otp = await markOutForDelivery(order.id);
-    const url = buildDeliveryOtpWhatsAppUrl(
-      order.customerPhone,
-      order.orderNumber,
-      order.pickupCode,
-      otp,
-      order.sellerName
-    );
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setMessage(`OTP sent via WhatsApp link for ${order.orderNumber}`);
-    await load();
-  };
-
-  const handleVerifyOtp = async (order: OrderRecord) => {
-    if (!order.id) return;
-    const entered = otpInput[order.id] || '';
-    const ok = await verifyDeliveryOtp(order.id, entered);
-    if (ok) {
-      setMessage(`Order ${order.orderNumber} delivered successfully`);
-      setOtpInput((prev) => ({ ...prev, [order.id!]: '' }));
+    if (!window.confirm(`Cancel order ${order.orderNumber}?`)) return;
+    try {
+      await cancelOrder(order.id);
+      setMessage(`Order ${order.orderNumber} cancelled`);
       await load();
-    } else {
-      alert('Invalid OTP. Ask the customer for the code sent on WhatsApp.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not cancel this order');
     }
   };
 
@@ -131,9 +133,21 @@ const SellerOrdersPage: React.FC = () => {
               <Bell className="w-8 h-8 text-red-600" />
               Order Inbox
             </h1>
-            <p className="text-gray-600 mt-1">Accept, pack, dispatch, and verify delivery OTP.</p>
+            <p className="text-gray-600 mt-1">Accept and pack. Riders pick up and complete delivery.</p>
           </div>
-          <Button variant="secondary" onClick={load}>Refresh</Button>
+          <div className="flex gap-2">
+            {alertPermission !== 'granted' && (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  setAlertPermission(await requestBrowserNotificationPermission());
+                }}
+              >
+                Enable alerts
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => load()}>Refresh</Button>
+          </div>
         </div>
 
         {message && (
@@ -157,7 +171,12 @@ const SellerOrdersPage: React.FC = () => {
                 new Date() > order.packByDeadline;
 
               return (
-                <div key={order.id} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <div
+                  key={order.id}
+                  className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+                    focusOrderId === order.id ? 'ring-2 ring-red-400' : ''
+                  }`}
+                >
                   <div className="p-5 border-b flex flex-wrap justify-between gap-3">
                     <div>
                       <p className="font-black text-lg">{order.orderNumber}</p>
@@ -198,8 +217,23 @@ const SellerOrdersPage: React.FC = () => {
                       {order.pickupOtp && ['packed', 'out_for_delivery'].includes(order.status) && (
                         <p className="flex items-center gap-2 text-orange-800 font-semibold">
                           <KeyRound className="w-4 h-4" />
-                          Delivery pickup OTP: <strong className="tracking-widest">{order.pickupOtp}</strong>
+                          Share this pickup OTP with the rider: <strong className="tracking-widest">{order.pickupOtp}</strong>
                         </p>
+                      )}
+                      {order.deliveryPartnerName && (
+                        <p className="flex items-center gap-2">
+                          <Truck className="w-4 h-4" />
+                          Rider: {order.deliveryPartnerName}
+                          {order.status === 'packed' && !order.pickupVerified
+                            ? ' · waiting for pickup'
+                            : ''}
+                        </p>
+                      )}
+                      {order.status === 'packed' && !order.deliveryPartnerId && (
+                        <p>Waiting for an online rider to accept this pickup.</p>
+                      )}
+                      {order.status === 'out_for_delivery' && (
+                        <p>Out for delivery. The rider will collect the customer OTP.</p>
                       )}
                       {order.items.map((item) => (
                         <p key={item.productId} className="text-gray-700">
@@ -214,31 +248,13 @@ const SellerOrdersPage: React.FC = () => {
                           Mark as {ORDER_STATUS_LABELS[NEXT_STATUS[order.status]!]}
                         </Button>
                       )}
-                      {order.status === 'packed' && (
-                        <Button onClick={() => handleOutForDelivery(order)}>
-                          <MessageCircle className="w-4 h-4 mr-2" />
-                          Send OTP via WhatsApp & Dispatch
-                        </Button>
-                      )}
-                      {order.status === 'out_for_delivery' && (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={6}
-                            placeholder="Enter customer OTP"
-                            value={otpInput[order.id!] || ''}
-                            onChange={(e) =>
-                              setOtpInput((prev) => ({ ...prev, [order.id!]: e.target.value }))
-                            }
-                            className="w-full px-3 py-2 border rounded-lg"
-                          />
-                          <Button onClick={() => handleVerifyOtp(order)}>
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Verify OTP & Complete Delivery
+                      {order.id &&
+                        CANCELLABLE_ORDER_STATUSES.includes(order.status) &&
+                        !order.pickupVerified && (
+                          <Button variant="secondary" onClick={() => handleCancel(order)}>
+                            Cancel order
                           </Button>
-                        </div>
-                      )}
+                        )}
                     </div>
                   </div>
                 </div>

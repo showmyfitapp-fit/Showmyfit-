@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   browserNotificationPermission,
@@ -11,18 +11,28 @@ import {
   fetchLatestNotifications,
   readSeenNotificationIds,
   rememberSeenNotificationIds,
+  type AppNotification,
 } from '@/lib/notifications/poll';
+import { subscribeTable } from '@/lib/realtime/subscribe';
+
+export interface OrderAlertToast extends AppNotification {
+  url: string;
+}
 
 export function useOrderBrowserAlerts() {
   const { currentUser } = useAuth();
   const primed = useRef(false);
+  const [toasts, setToasts] = useState<OrderAlertToast[]>([]);
+
+  const dismiss = (id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     let cancelled = false;
 
-    const poll = async () => {
-      if (browserNotificationPermission() !== 'granted') return;
+    const sync = async () => {
       try {
         const items = await fetchLatestNotifications(currentUser.uid);
         if (cancelled) return;
@@ -33,27 +43,50 @@ export function useOrderBrowserAlerts() {
           return;
         }
         const fresh = items.filter((item) => !seen.has(item.id));
-        fresh.forEach((item) => {
-          showSystemNotification({
-            title: item.title,
-            body: item.message,
-            tag: item.id,
-            url: notificationTargetUrl(item.type),
+        if (!fresh.length) return;
+
+        const nextToasts = fresh.map((item) => ({
+          ...item,
+          url: notificationTargetUrl(item.type),
+        }));
+        setToasts((prev) => [...nextToasts, ...prev].slice(0, 5));
+
+        if (browserNotificationPermission() === 'granted') {
+          fresh.forEach((item) => {
+            showSystemNotification({
+              title: item.title,
+              body: item.message,
+              tag: item.id,
+              url: notificationTargetUrl(item.type),
+            });
           });
-        });
-        if (fresh.length) {
-          rememberSeenNotificationIds(fresh.map((item) => item.id));
         }
+
+        rememberSeenNotificationIds(fresh.map((item) => item.id));
       } catch (error) {
-        console.warn('Order alert poll failed:', error);
+        console.warn('Order alert sync failed:', error);
       }
     };
 
-    poll();
-    const timer = window.setInterval(poll, 12000);
+    void sync();
+    const unsubscribe = subscribeTable({
+      channel: `notifications-${currentUser.uid}`,
+      table: 'notifications',
+      filter: `user_id=eq.${currentUser.uid}`,
+      onChange: () => {
+        void sync();
+      },
+    });
+    const poll = window.setInterval(() => {
+      void sync();
+    }, 20000);
+
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      unsubscribe();
+      window.clearInterval(poll);
     };
   }, [currentUser?.uid]);
+
+  return { toasts, dismiss };
 }

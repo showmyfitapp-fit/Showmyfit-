@@ -27,6 +27,7 @@ import {
   verifyPickupOtp,
   type DeliveryJob,
 } from '@/lib/delivery';
+import { subscribeTable } from '@/lib/realtime/subscribe';
 
 const DeliveryJobsPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
@@ -41,12 +42,13 @@ const DeliveryJobsPage: React.FC = () => {
   const [partnerName, setPartnerName] = useState('');
   const [isOnline, setIsOnline] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
 
   const isAdmin = userData?.role === 'admin';
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!currentUser) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const partner = isAdmin || (await isDeliveryPartner(currentUser.uid));
       setAllowed(partner);
@@ -57,12 +59,24 @@ const DeliveryJobsPage: React.FC = () => {
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser) load();
+    setFocusOrderId(new URLSearchParams(window.location.search).get('order'));
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    void load();
+    return subscribeTable({
+      channel: `delivery-jobs-${currentUser.uid}`,
+      table: 'delivery_jobs',
+      onChange: () => {
+        void load(true);
+      },
+    });
   }, [currentUser, userData?.role]);
 
   const handleEnableSelf = async () => {
@@ -260,7 +274,12 @@ const DeliveryJobsPage: React.FC = () => {
         ) : (
           <div className="space-y-4">
             {jobs.map((job) => (
-              <div key={job.id} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <div
+                key={job.id}
+                className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+                  focusOrderId === job.orderId ? 'ring-2 ring-orange-400' : ''
+                }`}
+              >
                 <div className="p-5 border-b flex justify-between gap-3">
                   <div>
                     <p className="font-black text-lg">{job.orderNumber}</p>

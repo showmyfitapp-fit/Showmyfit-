@@ -1,6 +1,7 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { generateDeliveryOtp } from './helpers';
-import type { OrderRecord, OrderStatus } from './types';
+import { requestOrderAlert } from './alerts';
+import { CANCELLABLE_ORDER_STATUSES, type OrderRecord, type OrderStatus } from './types';
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -8,7 +9,7 @@ function toDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function mapOrderRow(row: Record<string, any>): OrderRecord {
+export function mapOrderRow(row: Record<string, any>): OrderRecord {
   return {
     id: String(row.id),
     orderNumber: String(row.order_number || row.id),
@@ -48,6 +49,7 @@ function mapOrderRow(row: Record<string, any>): OrderRecord {
     packedAt: toDate(row.packed_at),
     outForDeliveryAt: toDate(row.out_for_delivery_at),
     deliveredAt: toDate(row.delivered_at),
+    cancelledAt: toDate(row.cancelled_at),
     createdAt: toDate(row.created_at),
     updatedAt: toDate(row.updated_at),
   };
@@ -181,6 +183,7 @@ export async function updateOrderStatus(
   if (status === 'packed') timestamps.packed_at = now;
   if (status === 'out_for_delivery') timestamps.out_for_delivery_at = now;
   if (status === 'delivered') timestamps.delivered_at = now;
+  if (status === 'cancelled') timestamps.cancelled_at = now;
 
   await updateOrderFields(orderId, { status, ...timestamps, ...extra });
 }
@@ -193,9 +196,36 @@ export async function markOutForDelivery(orderId: string): Promise<string> {
 
 export async function verifyDeliveryOtp(orderId: string, enteredOtp: string): Promise<boolean> {
   const order = await fetchOrderById(orderId);
-  if (!order?.deliveryOtp || order.deliveryOtp !== enteredOtp.trim()) return false;
+  if (order?.status !== 'out_for_delivery') return false;
+  if (!order.deliveryPartnerId) return false;
+  if (!order.deliveryOtp || order.deliveryOtp !== enteredOtp.trim()) return false;
   await updateOrderStatus(orderId, 'delivered', { deliveryOtpVerified: true });
   return true;
+}
+
+export async function cancelOrder(orderId: string, options?: { force?: boolean }): Promise<void> {
+  const order = await fetchOrderById(orderId);
+  if (!order) throw new Error('Order not found');
+  if (order.status === 'cancelled' || order.status === 'delivered') {
+    throw new Error('This order can no longer be cancelled');
+  }
+  if (!options?.force) {
+    if (!CANCELLABLE_ORDER_STATUSES.includes(order.status) || order.pickupVerified) {
+      throw new Error('Cancel is only available before the rider picks up the order');
+    }
+  }
+
+  await updateOrderStatus(orderId, 'cancelled');
+  const { error } = await getSupabaseBrowserClient()
+    .from('delivery_jobs')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('order_id', orderId)
+    .in('status', ['available', 'assigned', 'picked_up']);
+  if (error) throw error;
+  await requestOrderAlert('cancelled', orderId);
 }
 
 export async function notifyDeliveryPartnersOfOrder(params: {

@@ -14,6 +14,7 @@ import { getProductPath } from '@/utils/productUrls';
 import { logSearchQuery } from '@/lib/analytics/searchAnalytics';
 import { getProducts } from '@/lib/supabase/products';
 import LocationBar from './LocationBar';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 interface NavbarProps {
   userRole?: 'user' | 'shop' | 'admin';
@@ -272,6 +273,8 @@ const Navbar: React.FC<NavbarProps> = ({ userRole = 'user' }) => {
                 <Store className="w-4 h-4" />
                 <span>Become a Seller</span>
               </Link>
+
+              <NotificationBell />
 
               {/* Wishlist */}
               <Link href="/wishlist" className="relative p-2.5 hover:bg-gray-100 rounded-full transition-colors group">
