@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { absoluteUrl } from '@/config/site';
 import type { OrderAlertEvent } from '@/lib/orders/alerts';
 import { mapOrderRow } from '@/lib/orders/store';
+import { listOnlinePartnerRows } from '@/lib/server/delivery-partners';
+import { findByIdOrAuthUserId, getRequestUser, isAdminEmail } from '@/lib/server/request-user';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 import type { OrderRecord } from '@/lib/orders/types';
 
@@ -26,25 +28,6 @@ function identities(user: { id: string; email?: string | null }) {
   return Array.from(new Set([user.id, user.email?.toLowerCase()].filter(Boolean) as string[]));
 }
 
-async function getUserFromRequest(request: NextRequest) {
-  const header = request.headers.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token) return null;
-  const { data, error } = await getSupabaseAdminClient().auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
-
-async function isAdminEmail(email?: string | null) {
-  if (!email) return false;
-  const { data } = await getSupabaseAdminClient()
-    .from('admins')
-    .select('id')
-    .ilike('email', email)
-    .limit(1);
-  return Boolean(data?.length);
-}
-
 async function loadOrder(orderId: string): Promise<OrderRecord | null> {
   const { data, error } = await getSupabaseAdminClient()
     .from('orders')
@@ -57,13 +40,16 @@ async function loadOrder(orderId: string): Promise<OrderRecord | null> {
 
 async function sellerPhones(order: OrderRecord): Promise<string | undefined> {
   if (order.storePhone) return order.storePhone;
-  const { data } = await getSupabaseAdminClient()
-    .from('profiles')
-    .select('phone, raw')
-    .or(`id.eq.${order.sellerId},auth_user_id.eq.${order.sellerId}`)
-    .maybeSingle();
+  const data = await findByIdOrAuthUserId('profiles', order.sellerId, 'phone, raw');
   const raw = (data?.raw || {}) as Record<string, unknown>;
   return (data?.phone as string | undefined) || (typeof raw.phone === 'string' ? raw.phone : undefined);
+}
+
+async function sellerUserIds(sellerId: string) {
+  const profile = await findByIdOrAuthUserId('profiles', sellerId, 'id, auth_user_id');
+  return Array.from(
+    new Set([sellerId, profile?.id, profile?.auth_user_id].filter(Boolean).map(String))
+  );
 }
 
 function partnerUserIds(partner: { id?: string; auth_user_id?: string | null }) {
@@ -128,7 +114,7 @@ async function notifyInApp(
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUserFromRequest(request);
+    const user = await getRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
     }
@@ -145,11 +131,7 @@ export async function POST(request: NextRequest) {
 
     const keys = identities(user);
     const admin = await isAdminEmail(user.email);
-    const { data: profile } = await getSupabaseAdminClient()
-      .from('profiles')
-      .select('id, auth_user_id')
-      .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
-      .maybeSingle();
+    const profile = await findByIdOrAuthUserId('profiles', user.id, 'id, auth_user_id');
     if (profile?.id) keys.push(String(profile.id));
     if (profile?.auth_user_id) keys.push(String(profile.auth_user_id));
 
@@ -158,11 +140,7 @@ export async function POST(request: NextRequest) {
     const isAssignedRider = Boolean(
       order.deliveryPartnerId && keys.includes(order.deliveryPartnerId)
     );
-    const { data: partnerRow } = await getSupabaseAdminClient()
-      .from('delivery_partners')
-      .select('id, auth_user_id')
-      .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
-      .maybeSingle();
+    const partnerRow = await findByIdOrAuthUserId('delivery_partners', user.id, 'id, auth_user_id');
     const isPartner = Boolean(partnerRow);
 
     const allowed =
@@ -184,18 +162,15 @@ export async function POST(request: NextRequest) {
 
     if (body.event === 'new_order' || body.event === 'job_assigned' || body.event === 'picked_up' || body.event === 'delivered') {
       recipients.push({
-        userIds: [order.sellerId],
+        userIds: await sellerUserIds(order.sellerId),
         phone: await sellerPhones(order),
         role: 'seller',
       });
     }
 
     if (body.event === 'new_order' || body.event === 'pickup_ready') {
-      const { data: partners } = await getSupabaseAdminClient()
-        .from('delivery_partners')
-        .select('id, auth_user_id, phone, is_online')
-        .eq('is_online', true);
-      (partners || []).forEach((partner) => {
+      const partners = await listOnlinePartnerRows();
+      partners.forEach((partner) => {
         recipients.push({
           userIds: partnerUserIds(partner),
           phone: partner.phone,
@@ -206,19 +181,19 @@ export async function POST(request: NextRequest) {
 
     if (body.event === 'cancelled') {
       recipients.push({
-        userIds: [order.sellerId],
+        userIds: await sellerUserIds(order.sellerId),
         phone: await sellerPhones(order),
         role: 'seller',
       });
       if (order.deliveryPartnerId) {
-        const { data: assigned } = await getSupabaseAdminClient()
-          .from('delivery_partners')
-          .select('id, auth_user_id, phone')
-          .or(`id.eq.${order.deliveryPartnerId},auth_user_id.eq.${order.deliveryPartnerId}`)
-          .maybeSingle();
+        const assigned = await findByIdOrAuthUserId(
+          'delivery_partners',
+          order.deliveryPartnerId,
+          'id, auth_user_id, phone'
+        );
         recipients.push({
           userIds: assigned ? partnerUserIds(assigned) : [order.deliveryPartnerId],
-          phone: assigned?.phone,
+          phone: assigned?.phone ? String(assigned.phone) : undefined,
           role: 'delivery',
         });
       }
@@ -237,21 +212,18 @@ export async function POST(request: NextRequest) {
       recipients.map(async (recipient) => {
         const link = recipient.role === 'delivery' ? deliveryLink : sellerLink;
         const message = buildMessage(body.event!, order, link, recipient.role);
-        const skipSellerInApp = body.event === 'new_order' && recipient.role === 'seller';
-        if (!skipSellerInApp) {
-          await notifyInApp(recipient.userIds, {
-            type: recipient.role === 'delivery' && body.event === 'new_order'
-              ? 'new_order_delivery'
-              : body.event!,
-            title: recipient.role === 'delivery' && body.event === 'new_order'
-              ? 'New order nearby'
-              : titles[body.event!],
-            message,
-            orderId: order.id!,
-            orderNumber: order.orderNumber,
-            items: order.items,
-          });
-        }
+        await notifyInApp(recipient.userIds, {
+          type: recipient.role === 'delivery' && body.event === 'new_order'
+            ? 'new_order_delivery'
+            : body.event!,
+          title: recipient.role === 'delivery' && body.event === 'new_order'
+            ? 'New order nearby'
+            : titles[body.event!],
+          message,
+          orderId: order.id!,
+          orderNumber: order.orderNumber,
+          items: order.items,
+        });
       })
     );
 

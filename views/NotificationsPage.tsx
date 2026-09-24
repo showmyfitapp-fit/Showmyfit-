@@ -4,22 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Bell, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { notificationTargetUrl } from '@/lib/notifications/browser';
+import { fetchAllNotifications, type AppNotification } from '@/lib/notifications/poll';
 import { markNotificationsRead } from '@/lib/orders';
-
-interface NotificationRow {
-  id: string;
-  type?: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt?: string;
-}
 
 const NotificationsPage: React.FC = () => {
   const { currentUser } = useAuth();
-  const [items, setItems] = useState<NotificationRow[]>([]);
+  const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,24 +18,9 @@ const NotificationsPage: React.FC = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const { data, error } = await getSupabaseBrowserClient()
-          .from('notifications')
-          .select('id, type, title, message, read, created_at')
-          .eq('user_id', currentUser.uid)
-          .order('created_at', { ascending: false })
-          .limit(40);
-        if (error) throw error;
-        setItems(
-          (data || []).map((row) => ({
-            id: String(row.id),
-            type: row.type ? String(row.type) : undefined,
-            title: String(row.title || 'Update'),
-            message: String(row.message || ''),
-            read: Boolean(row.read),
-            createdAt: row.created_at ? String(row.created_at) : undefined,
-          }))
-        );
-        await markNotificationsRead(currentUser.uid);
+        const data = await fetchAllNotifications(40);
+        setItems(data);
+        await markNotificationsRead();
       } catch (error) {
         console.error(error);
       } finally {

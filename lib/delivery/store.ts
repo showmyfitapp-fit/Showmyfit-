@@ -1,3 +1,4 @@
+import { apiRequest } from '@/lib/api/browser';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { requestOrderAlert } from '@/lib/orders/alerts';
 import {
@@ -57,14 +58,9 @@ function mapPartner(row: Record<string, any>): DeliveryPartner {
   };
 }
 
-export async function getDeliveryPartner(userId: string): Promise<DeliveryPartner | null> {
-  const { data, error } = await db()
-    .from('delivery_partners')
-    .select('*')
-    .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? mapPartner(data) : null;
+export async function getDeliveryPartner(_userId?: string): Promise<DeliveryPartner | null> {
+  const { partner } = await apiRequest<{ partner: DeliveryPartner | null }>('/api/delivery/me');
+  return partner;
 }
 
 export async function isDeliveryPartner(userId: string): Promise<boolean> {
@@ -72,32 +68,19 @@ export async function isDeliveryPartner(userId: string): Promise<boolean> {
 }
 
 export async function setDeliveryPartnerOnline(
-  userId: string,
+  _userId: string,
   isOnline: boolean
 ): Promise<DeliveryPartner> {
-  const partner = await getDeliveryPartner(userId);
-  if (!partner) {
-    throw new Error('Your account is not enabled as a delivery partner');
-  }
-
-  const { data, error } = await db()
-    .from('delivery_partners')
-    .update({
-      is_online: isOnline,
-      last_online_at: new Date().toISOString(),
-    })
-    .eq('id', partner.id)
-    .select('*')
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error('Could not update online status');
-  return mapPartner(data);
+  const { partner } = await apiRequest<{ partner: DeliveryPartner }>('/api/delivery/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ isOnline }),
+  });
+  return partner;
 }
 
 export async function fetchDeliveryPartners(): Promise<DeliveryPartner[]> {
-  const { data, error } = await db().from('delivery_partners').select('*');
-  if (error) throw error;
-  return (data || []).map(mapPartner);
+  const { partners } = await apiRequest<{ partners: DeliveryPartner[] }>('/api/delivery/partners');
+  return partners;
 }
 
 export async function enableDeliveryPartner(params: {
@@ -105,14 +88,10 @@ export async function enableDeliveryPartner(params: {
   name: string;
   phone?: string;
 }): Promise<void> {
-  const { data: session } = await db().auth.getUser();
-  const { error } = await db().from('delivery_partners').upsert({
-    id: params.userId,
-    auth_user_id: session.user?.id || params.userId,
-    name: params.name,
-    phone: params.phone || '',
+  await apiRequest('/api/delivery/partners', {
+    method: 'POST',
+    body: JSON.stringify(params),
   });
-  if (error) throw error;
 }
 
 export async function createPickupJob(order: OrderRecord): Promise<string> {

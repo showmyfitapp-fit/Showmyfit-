@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 
 export interface AppNotification {
   id: string;
@@ -6,6 +6,7 @@ export interface AppNotification {
   title: string;
   message: string;
   orderId?: string;
+  read?: boolean;
   createdAt?: string;
 }
 
@@ -26,21 +27,16 @@ export function rememberSeenNotificationIds(ids: string[]) {
   sessionStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen).slice(-80)));
 }
 
-export async function fetchLatestNotifications(userId: string): Promise<AppNotification[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('notifications')
-    .select('id, type, title, message, order_id, created_at')
-    .eq('user_id', userId)
-    .eq('read', false)
-    .order('created_at', { ascending: false })
-    .limit(20);
-  if (error) throw error;
-  return (data || []).map((row) => ({
-    id: String(row.id),
-    type: row.type ? String(row.type) : undefined,
-    title: String(row.title || 'New update'),
-    message: String(row.message || ''),
-    orderId: row.order_id ? String(row.order_id) : undefined,
-    createdAt: row.created_at ? String(row.created_at) : undefined,
-  }));
+export async function fetchLatestNotifications(_userId?: string): Promise<AppNotification[]> {
+  const { items } = await apiRequest<{ items: AppNotification[] }>(
+    '/api/notifications?unread=1&limit=20'
+  );
+  return items || [];
+}
+
+export async function fetchAllNotifications(limit = 40): Promise<AppNotification[]> {
+  const { items } = await apiRequest<{ items: AppNotification[] }>(
+    `/api/notifications?limit=${limit}`
+  );
+  return items || [];
 }

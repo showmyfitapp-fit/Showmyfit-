@@ -1,3 +1,4 @@
+import { apiRequest } from '@/lib/api/browser';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { generateDeliveryOtp } from './helpers';
 import { requestOrderAlert } from './alerts';
@@ -228,83 +229,14 @@ export async function cancelOrder(orderId: string, options?: { force?: boolean }
   await requestOrderAlert('cancelled', orderId);
 }
 
-export async function notifyDeliveryPartnersOfOrder(params: {
-  orderId: string;
-  orderNumber: string;
-  sellerName: string;
-  message: string;
-  items?: OrderRecord['items'];
-}) {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('delivery_partners')
-    .select('id, auth_user_id')
-    .eq('is_online', true);
-  if (error || !data?.length) return;
-
-  const userIds = Array.from(
-    new Set(
-      data.flatMap((partner) => [partner.id, partner.auth_user_id].filter(Boolean).map(String))
-    )
-  );
-
-  const { error: insertError } = await getSupabaseBrowserClient()
-    .from('notifications')
-    .insert(
-      userIds.map((userId) => ({
-        user_id: userId,
-        type: 'new_order_delivery',
-        title: 'New order available',
-        message: params.message,
-        order_id: params.orderId,
-        order_number: params.orderNumber,
-        items: params.items || [],
-        read: false,
-      }))
-    );
-  if (insertError) throw insertError;
-}
-
-export async function createSellerNotification(params: {
-  sellerId: string;
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  total: number;
-  message: string;
-  items?: OrderRecord['items'];
-}) {
-  const { error } = await getSupabaseBrowserClient().from('notifications').insert({
-    user_id: params.sellerId,
-    type: 'new_order',
-    order_id: params.orderId,
-    order_number: params.orderNumber,
-    title: 'New order received',
-    message: params.message,
-    customer_name: params.customerName,
-    total: params.total,
-    items: params.items || [],
-    read: false,
-  });
-  if (error) throw error;
-}
-
-export async function fetchUnreadNotificationCount(userId: string): Promise<number> {
-  const { count, error } = await getSupabaseBrowserClient()
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false);
-  if (error) throw error;
+export async function fetchUnreadNotificationCount(_userId?: string): Promise<number> {
+  const { count } = await apiRequest<{ count: number }>('/api/notifications?count=1&unread=1');
   return count || 0;
 }
 
-export async function markNotificationsRead(userId: string, orderId?: string) {
-  let query = getSupabaseBrowserClient()
-    .from('notifications')
-    .update({ read: true })
-    .eq('user_id', userId)
-    .eq('read', false);
-  if (orderId) query = query.eq('order_id', orderId);
-  const { error } = await query;
-  if (error) throw error;
+export async function markNotificationsRead(_userId?: string, orderId?: string) {
+  await apiRequest('/api/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify({ orderId }),
+  });
 }

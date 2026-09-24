@@ -1,6 +1,8 @@
--- Run in Supabase → SQL Editor → Run.
--- Adds Swiggy/Zomato-style online status for delivery partners.
+-- Ensures delivery partner online-status columns exist.
 -- Safe to re-run.
+
+alter table public.delivery_partners
+  add column if not exists auth_user_id text;
 
 alter table public.delivery_partners
   add column if not exists is_online boolean not null default false;
