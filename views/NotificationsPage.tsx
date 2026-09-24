@@ -61,7 +61,7 @@ const NotificationsPage: React.FC = () => {
             {items.map((item) => (
               <Link
                 key={item.id}
-                href={notificationTargetUrl(item.type)}
+                href={notificationTargetUrl(item.type, item.orderId)}
                 className={`block bg-white rounded-2xl border p-4 ${
                   item.read ? 'border-gray-100' : 'border-orange-200 bg-orange-50/40'
                 }`}

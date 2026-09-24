@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     const sellerLink = absoluteUrl(`/seller/orders?order=${order.id}`);
-    const deliveryLink = absoluteUrl(`/delivery?order=${order.id}`);
+    const deliveryLink = absoluteUrl(`/delivery/${order.id}`);
     const recipients: Recipient[] = [];
 
     if (body.event === 'new_order' || body.event === 'job_assigned' || body.event === 'picked_up' || body.event === 'delivered') {

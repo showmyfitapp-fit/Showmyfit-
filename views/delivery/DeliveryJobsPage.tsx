@@ -64,7 +64,8 @@ const DeliveryJobsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    setFocusOrderId(new URLSearchParams(window.location.search).get('order'));
+    const fromPath = window.location.pathname.split('/').filter(Boolean)[1];
+    setFocusOrderId(fromPath || new URLSearchParams(window.location.search).get('order'));
   }, []);
 
   useEffect(() => {

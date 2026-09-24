@@ -47,7 +47,7 @@ export function useOrderBrowserAlerts() {
 
         const nextToasts = fresh.map((item) => ({
           ...item,
-          url: notificationTargetUrl(item.type),
+          url: notificationTargetUrl(item.type, item.orderId),
         }));
         setToasts((prev) => [...nextToasts, ...prev].slice(0, 5));
 
@@ -57,7 +57,7 @@ export function useOrderBrowserAlerts() {
               title: item.title,
               body: item.message,
               tag: item.id,
-              url: notificationTargetUrl(item.type),
+              url: notificationTargetUrl(item.type, item.orderId),
             });
           });
         }

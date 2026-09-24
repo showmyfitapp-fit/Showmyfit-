@@ -38,10 +38,10 @@ export function showSystemNotification(params: {
   };
 }
 
-export function notificationTargetUrl(type?: string): string {
+export function notificationTargetUrl(type?: string, orderId?: string): string {
   if (type === 'delivery_pickup' || type === 'new_order_delivery' || type === 'pickup_ready') {
-    return '/delivery';
+    return orderId ? `/delivery/${orderId}` : '/delivery';
   }
-  if (type === 'cancelled') return '/profile';
-  return '/seller/orders';
+  if (type === 'cancelled') return orderId ? `/delivery/${orderId}` : '/profile';
+  return orderId ? `/seller/orders?order=${orderId}` : '/seller/orders';
 }

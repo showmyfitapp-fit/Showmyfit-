@@ -1,5 +1,4 @@
 import { apiRequest } from '@/lib/api/browser';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { generateDeliveryOtp } from './helpers';
 import { requestOrderAlert } from './alerts';
 import { CANCELLABLE_ORDER_STATUSES, type OrderRecord, type OrderStatus } from './types';
@@ -105,72 +104,46 @@ const EXTRA_COLUMN: Record<string, string> = {
 };
 
 export async function createOrder(order: Omit<OrderRecord, 'id'>): Promise<string> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .insert(toOrderInsert(order))
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data.id;
+  const { id } = await apiRequest<{ id: string }>('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify({ order: toOrderInsert(order) }),
+  });
+  return id;
 }
 
-export async function fetchCustomerOrders(userId: string): Promise<OrderRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(mapOrderRow);
+export async function fetchCustomerOrders(_userId?: string): Promise<OrderRecord[]> {
+  const { orders } = await apiRequest<{ orders: Record<string, any>[] }>('/api/orders?scope=mine');
+  return (orders || []).map(mapOrderRow);
 }
 
-export async function fetchSellerOrders(sellerId: string): Promise<OrderRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .select('*')
-    .eq('seller_id', sellerId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(mapOrderRow);
+export async function fetchSellerOrders(_sellerId?: string): Promise<OrderRecord[]> {
+  const { orders } = await apiRequest<{ orders: Record<string, any>[] }>('/api/orders?scope=seller');
+  return (orders || []).map(mapOrderRow);
 }
 
 export async function fetchAllOrders(): Promise<OrderRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(mapOrderRow);
+  const { orders } = await apiRequest<{ orders: Record<string, any>[] }>('/api/orders?scope=all');
+  return (orders || []).map(mapOrderRow);
 }
 
 export async function fetchOrderById(orderId: string): Promise<OrderRecord | null> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .select('*')
-    .eq('id', orderId)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? mapOrderRow(data) : null;
+  const { order } = await apiRequest<{ order: Record<string, any> | null }>(`/api/orders/${orderId}`);
+  return order ? mapOrderRow(order) : null;
 }
 
 export async function updateOrderFields(
   orderId: string,
   fields: Record<string, unknown>
 ): Promise<void> {
-  const payload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-
+  const payload: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
     const column = EXTRA_COLUMN[key] || key;
     payload[column] = value instanceof Date ? value.toISOString() : value;
   }
-
-  const { error } = await getSupabaseBrowserClient()
-    .from('orders')
-    .update(payload)
-    .eq('id', orderId);
-  if (error) throw error;
+  await apiRequest(`/api/orders/${orderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: payload }),
+  });
 }
 
 export async function updateOrderStatus(
@@ -217,15 +190,10 @@ export async function cancelOrder(orderId: string, options?: { force?: boolean }
   }
 
   await updateOrderStatus(orderId, 'cancelled');
-  const { error } = await getSupabaseBrowserClient()
-    .from('delivery_jobs')
-    .update({
-      status: 'cancelled',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('order_id', orderId)
-    .in('status', ['available', 'assigned', 'picked_up']);
-  if (error) throw error;
+  await apiRequest('/api/delivery/jobs', {
+    method: 'PATCH',
+    body: JSON.stringify({ orderId, fields: { status: 'cancelled' } }),
+  });
   await requestOrderAlert('cancelled', orderId);
 }
 
