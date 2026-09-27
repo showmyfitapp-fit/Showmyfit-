@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 
 export type AddressLabel = 'House' | 'Office' | 'Other';
 
@@ -34,10 +34,6 @@ type AddressRow = {
   longitude?: number | string | null;
   map_address?: string | null;
 };
-
-const BASE_COLUMNS =
-  'id, label, line1, street, save_as, area, city, receiver_name, receiver_phone, instructions';
-const ADDRESS_COLUMNS = `${BASE_COLUMNS}, latitude, longitude, map_address`;
 
 function asLabel(value: string | null): AddressLabel {
   if (value === 'Office' || value === 'Other' || value === 'House') return value;
@@ -87,67 +83,25 @@ function toInsert(address: Omit<SavedAddress, 'id'>, authUserId: string, userId:
   };
 }
 
-function missingLocationColumn(error: { message?: string } | null) {
-  const message = error?.message || '';
-  return /latitude|longitude|map_address|column/i.test(message);
-}
-
-export async function listUserAddresses(authUserId: string): Promise<SavedAddress[]> {
-  const client = getSupabaseBrowserClient();
-  const withCoords = await client
-    .from('user_addresses')
-    .select(ADDRESS_COLUMNS)
-    .eq('auth_user_id', authUserId)
-    .order('created_at', { ascending: false });
-
-  if (!withCoords.error) {
-    return (withCoords.data || []).map((row) => mapRow(row as AddressRow));
-  }
-
-  const fallback = await client
-    .from('user_addresses')
-    .select(BASE_COLUMNS)
-    .eq('auth_user_id', authUserId)
-    .order('created_at', { ascending: false });
-
-  if (fallback.error) throw fallback.error;
-  return (fallback.data || []).map((row) => mapRow(row as AddressRow));
+export async function listUserAddresses(_authUserId: string): Promise<SavedAddress[]> {
+  const { rows } = await apiRequest<{ rows: AddressRow[] }>('/api/addresses');
+  return (rows || []).map(mapRow);
 }
 
 export async function insertUserAddress(
-  authUserId: string,
+  _authUserId: string,
   userId: string,
   address: Omit<SavedAddress, 'id'>
 ): Promise<SavedAddress> {
-  const client = getSupabaseBrowserClient();
-  const payload = toInsert(address, authUserId, userId);
-  const withCoords = await client
-    .from('user_addresses')
-    .insert(payload)
-    .select(ADDRESS_COLUMNS)
-    .single();
-
-  if (!withCoords.error) {
-    return mapRow(withCoords.data as AddressRow);
-  }
-
-  if (!missingLocationColumn(withCoords.error)) {
-    throw withCoords.error;
-  }
-
-  const { latitude: _lat, longitude: _lng, map_address: _map, ...base } = payload;
-  const fallback = await client
-    .from('user_addresses')
-    .insert(base)
-    .select(BASE_COLUMNS)
-    .single();
-
-  if (fallback.error) throw fallback.error;
+  const { row } = await apiRequest<{ row: AddressRow }>('/api/addresses', {
+    method: 'POST',
+    body: JSON.stringify({ address: toInsert(address, _authUserId, userId), userId }),
+  });
   return {
-    ...mapRow(fallback.data as AddressRow),
-    latitude: address.latitude,
-    longitude: address.longitude,
-    mapAddress: address.mapAddress,
+    ...mapRow(row),
+    latitude: address.latitude ?? asCoord(row.latitude),
+    longitude: address.longitude ?? asCoord(row.longitude),
+    mapAddress: address.mapAddress || row.map_address || undefined,
   };
 }
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 import { resolveStorageImage } from '@/lib/supabase/products';
 
 export interface WishlistItem {
@@ -61,14 +61,9 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       try {
         setLoading(true);
-        const { data, error } = await getSupabaseBrowserClient()
-          .from('wishlists')
-          .select('*')
-          .eq('user_id', currentUser.uid)
-          .order('added_at', { ascending: false });
-        if (error) throw error;
+        const { rows } = await apiRequest<{ rows: any[] }>('/api/wishlist');
 
-        const items = (data || []).map((row) => ({
+        const items = (rows || []).map((row) => ({
           id: row.id,
           productId: row.product_id,
           name: row.name || '',
@@ -140,10 +135,10 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
         },
       };
 
-      const { error } = await getSupabaseBrowserClient()
-        .from('wishlists')
-        .insert(wishlistData);
-      if (error) throw error;
+      await apiRequest('/api/wishlist', {
+        method: 'POST',
+        body: JSON.stringify({ item: wishlistData }),
+      });
       
       const newItem: WishlistItem = {
         id,
@@ -166,11 +161,9 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
       const item = wishlistItems.find(item => item.productId === productId);
       if (!item) return;
 
-      const { error } = await getSupabaseBrowserClient()
-        .from('wishlists')
-        .delete()
-        .eq('id', item.id);
-      if (error) throw error;
+      await apiRequest(`/api/wishlist?id=${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+      });
       setWishlistItems(prev => prev.filter(item => item.productId !== productId));
     } catch (error) {
       console.error('Error removing from wishlist:', error);

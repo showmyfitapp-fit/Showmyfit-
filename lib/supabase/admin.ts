@@ -1,4 +1,5 @@
-import { getSupabaseBrowserClient } from './client';
+import { apiRequest } from '@/lib/api/browser';
+import { dataQuery } from '@/lib/api/data';
 import {
   getProducts,
   mapHomePageSectionRow,
@@ -35,12 +36,11 @@ export function orderTotal(order: JsonRecord): number {
 }
 
 export async function getProfiles(): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false, nullsFirst: false });
-
-  if (error) throw error;
+  const data = await dataQuery<JsonRecord[]>({
+    table: 'profiles',
+    action: 'select',
+    order: { column: 'created_at', ascending: false, nullsFirst: false },
+  });
   return (data || []).map((row) => {
     const profile = mapProfileRow(row);
     const raw = (row.raw || {}) as JsonRecord;
@@ -69,53 +69,53 @@ export async function updateProfileStatus(
   profileId: string,
   status: 'active' | 'inactive' | 'suspended'
 ): Promise<void> {
-  const client = getSupabaseBrowserClient();
-  const { data: existing, error: readError } = await client
-    .from('profiles')
-    .select('raw')
-    .eq('id', profileId)
-    .single();
-  if (readError) throw readError;
+  const existing = await dataQuery<JsonRecord>({
+    table: 'profiles',
+    action: 'select',
+    columns: 'raw',
+    filters: [{ op: 'eq', column: 'id', value: profileId }],
+    single: true,
+  });
 
-  const { error } = await client
-    .from('profiles')
-    .update({
+  await dataQuery({
+    table: 'profiles',
+    action: 'update',
+    data: {
       raw: { ...(existing?.raw || {}), status },
       updated_at: nowIso(),
-    })
-    .eq('id', profileId);
-  if (error) throw error;
+    },
+    filters: [{ op: 'eq', column: 'id', value: profileId }],
+  });
 }
 
 export async function getActiveSellers(): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('sellers')
-    .select('*')
-    .eq('is_active', true);
-
-  if (error) throw error;
-  return data || [];
+  return (
+    (await dataQuery<JsonRecord[]>({
+      table: 'sellers',
+      action: 'select',
+      filters: [{ op: 'eq', column: 'is_active', value: true }],
+    })) || []
+  );
 }
 
 export async function getAllSellers(): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('sellers')
-    .select('*')
-    .order('approved_at', { ascending: false, nullsFirst: false });
-
-  if (error) throw error;
-  return data || [];
+  return (
+    (await dataQuery<JsonRecord[]>({
+      table: 'sellers',
+      action: 'select',
+      order: { column: 'approved_at', ascending: false, nullsFirst: false },
+    })) || []
+  );
 }
 
 export async function getSellerApplications(): Promise<JsonRecord[]> {
-  const client = getSupabaseBrowserClient();
-  const { data, error } = await client
-    .from('seller_applications')
-    .select('*')
-    .order('created_at', { ascending: false, nullsFirst: false });
-
-  if (error) throw error;
-  return data || [];
+  return (
+    (await dataQuery<JsonRecord[]>({
+      table: 'seller_applications',
+      action: 'select',
+      order: { column: 'created_at', ascending: false, nullsFirst: false },
+    })) || []
+  );
 }
 
 /** Unified seller list for admin: applications + approved sellers + pending profiles. */
@@ -258,12 +258,11 @@ export async function getAdminDashboardData() {
 }
 
 export async function getHomePageSectionsAdmin(): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('home_page_sections')
-    .select('*')
-    .order('sort_order', { ascending: true, nullsFirst: false });
-
-  if (error) throw error;
+  const data = await dataQuery<JsonRecord[]>({
+    table: 'home_page_sections',
+    action: 'select',
+    order: { column: 'sort_order', ascending: true, nullsFirst: false },
+  });
   return (data || []).map((row) => {
     const mapped = mapHomePageSectionRow(row);
     return {
@@ -284,7 +283,6 @@ export async function saveHomePageSection(
   section: JsonRecord,
   existingId?: string
 ): Promise<void> {
-  const client = getSupabaseBrowserClient();
   const id = existingId || crypto.randomUUID();
   const payload = {
     id,
@@ -304,37 +302,32 @@ export async function saveHomePageSection(
     ...(existingId ? {} : { created_at: nowIso() }),
   };
 
-  const { error } = await client.from('home_page_sections').upsert(payload);
-  if (error) throw error;
+  await dataQuery({ table: 'home_page_sections', action: 'upsert', data: payload });
 }
 
 export async function deleteHomePageSection(sectionId: string): Promise<void> {
-  const { error } = await getSupabaseBrowserClient()
-    .from('home_page_sections')
-    .delete()
-    .eq('id', sectionId);
-  if (error) throw error;
+  await dataQuery({
+    table: 'home_page_sections',
+    action: 'delete',
+    filters: [{ op: 'eq', column: 'id', value: sectionId }],
+  });
 }
 
 export async function getSetting(id: string): Promise<JsonRecord | null> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('settings')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return dataQuery<JsonRecord | null>({
+    table: 'settings',
+    action: 'select',
+    filters: [{ op: 'eq', column: 'id', value: id }],
+    maybeSingle: true,
+  });
 }
 
 export async function upsertSetting(id: string, data: JsonRecord): Promise<void> {
-  const { error } = await getSupabaseBrowserClient()
-    .from('settings')
-    .upsert({
-      id,
-      data,
-      updated_at: nowIso(),
-    });
-  if (error) throw error;
+  await dataQuery({
+    table: 'settings',
+    action: 'upsert',
+    data: { id, data, updated_at: nowIso() },
+  });
 }
 
 export async function getAdminSettings(): Promise<JsonRecord | null> {
@@ -349,25 +342,26 @@ export async function saveAdminSettings(settings: JsonRecord): Promise<void> {
 }
 
 export async function listAdminEmails(): Promise<string[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('admins')
-    .select('email');
-  if (error) throw error;
+  const data = await dataQuery<JsonRecord[]>({
+    table: 'admins',
+    action: 'select',
+    columns: 'email',
+  });
   return (data || [])
     .map((row) => String(row.email || '').toLowerCase())
     .filter(Boolean);
 }
 
 export async function saveAdminEmails(emails: string[]): Promise<void> {
-  const client = getSupabaseBrowserClient();
   const normalized = [
     ...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
   ];
 
-  const { data: existing, error: readError } = await client
-    .from('admins')
-    .select('id, email');
-  if (readError) throw readError;
+  const existing = await dataQuery<JsonRecord[]>({
+    table: 'admins',
+    action: 'select',
+    columns: 'id, email',
+  });
 
   const existingEmails = new Set(
     (existing || []).map((row) => String(row.email || '').toLowerCase())
@@ -378,27 +372,25 @@ export async function saveAdminEmails(emails: string[]): Promise<void> {
     (row) => !desired.has(String(row.email || '').toLowerCase())
   );
   if (toDelete.length) {
-    const { error } = await client
-      .from('admins')
-      .delete()
-      .in(
-        'id',
-        toDelete.map((row) => row.id)
-      );
-    if (error) throw error;
+    await dataQuery({
+      table: 'admins',
+      action: 'delete',
+      filters: [{ op: 'in', column: 'id', value: toDelete.map((row) => row.id) }],
+    });
   }
 
   const toInsert = normalized.filter((email) => !existingEmails.has(email));
   if (toInsert.length) {
-    const { error } = await client.from('admins').upsert(
-      toInsert.map((email) => ({
+    await dataQuery({
+      table: 'admins',
+      action: 'upsert',
+      data: toInsert.map((email) => ({
         id: email,
         email,
         role: 'admin',
         created_at: nowIso(),
-      }))
-    );
-    if (error) throw error;
+      })),
+    });
   }
 }
 
@@ -406,7 +398,6 @@ export async function saveProduct(
   product: JsonRecord,
   existingId?: string
 ): Promise<string> {
-  const client = getSupabaseBrowserClient();
   const id = existingId || crypto.randomUUID();
   const image =
     product.image || product.imageUrl || product.images?.[0] || null;
@@ -444,30 +435,29 @@ export async function saveProduct(
     ...(existingId ? {} : { created_at: nowIso() }),
   };
 
-  const { error } = await client.from('products').upsert(payload);
-  if (error) throw error;
+  await dataQuery({ table: 'products', action: 'upsert', data: payload });
   return id;
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
-  const { error } = await getSupabaseBrowserClient()
-    .from('products')
-    .delete()
-    .eq('id', productId);
-  if (error) throw error;
+  await dataQuery({
+    table: 'products',
+    action: 'delete',
+    filters: [{ op: 'eq', column: 'id', value: productId }],
+  });
 }
 
 export async function updateProductFields(
   productId: string,
   fields: JsonRecord
 ): Promise<void> {
-  const client = getSupabaseBrowserClient();
-  const { data: existing, error: readError } = await client
-    .from('products')
-    .select('raw')
-    .eq('id', productId)
-    .single();
-  if (readError) throw readError;
+  const existing = await dataQuery<JsonRecord>({
+    table: 'products',
+    action: 'select',
+    columns: 'raw',
+    filters: [{ op: 'eq', column: 'id', value: productId }],
+    single: true,
+  });
 
   const update: JsonRecord = {
     raw: { ...(existing?.raw || {}), ...fields },
@@ -492,21 +482,19 @@ export async function updateProductFields(
     update.category_specific_data = fields.categorySpecificData;
   }
 
-  const { error } = await client
-    .from('products')
-    .update(update)
-    .eq('id', productId);
-  if (error) throw error;
+  await dataQuery({
+    table: 'products',
+    action: 'update',
+    data: update,
+    filters: [{ op: 'eq', column: 'id', value: productId }],
+  });
 }
 
 export async function getProductsBySeller(sellerUserId: string): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('products')
-    .select('*')
-    .eq('seller_user_id', sellerUserId)
-    .order('created_at', { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  return (data || []).map(mapProductRow);
+  const { rows } = await apiRequest<{ rows: JsonRecord[] }>(
+    `/api/catalog?kind=products&sellerId=${encodeURIComponent(sellerUserId)}`
+  );
+  return (rows || []).map(mapProductRow);
 }
 
 export { getProducts, mapProductRow, resolveStorageImage };

@@ -116,6 +116,13 @@ export async function createPickupJob(order: OrderRecord): Promise<string> {
   return pickupOtp;
 }
 
+export async function fetchDeliveryJobByOrderId(orderId: string): Promise<DeliveryJob | null> {
+  const { jobs } = await apiRequest<{ jobs: Record<string, any>[] }>(
+    `/api/delivery/jobs?orderId=${encodeURIComponent(orderId)}`
+  );
+  return jobs?.[0] ? mapJob(jobs[0]) : null;
+}
+
 export async function fetchDeliveryJobs(partnerId?: string): Promise<DeliveryJob[]> {
   const { jobs } = await apiRequest<{ jobs: Record<string, any>[] }>('/api/delivery/jobs');
   const partner = partnerId ? await getDeliveryPartner(partnerId) : null;

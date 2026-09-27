@@ -6,7 +6,7 @@ import { Shield, Mail, CheckCircle, AlertCircle, RefreshCw, Database } from 'luc
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProfiles, listAdminEmails } from '@/lib/supabase/admin';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 
 const DebugAdminPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
@@ -30,11 +30,9 @@ const DebugAdminPage: React.FC = () => {
         (admin) => admin.data.email === currentUser.email?.toLowerCase()
       );
 
-      const { data: profile } = await getSupabaseBrowserClient()
-        .from('profiles')
-        .select('*')
-        .or(`id.eq.${currentUser.uid},auth_user_id.eq.${currentUser.uid}`)
-        .maybeSingle();
+      const { profile } = await apiRequest<{ profile: any }>(
+        `/api/auth/profile?uid=${encodeURIComponent(currentUser.uid)}`
+      );
 
       setDebugInfo({
         currentUserEmail: currentUser.email,

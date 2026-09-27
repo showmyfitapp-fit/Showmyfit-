@@ -11,7 +11,7 @@ import {
 import { useCart } from '@/contexts/CartContext';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 import {
   getProductByIdOrSlug,
   getProducts,
@@ -124,14 +124,11 @@ const ProductDetailPage: React.FC = () => {
 
     setLoadingReviews(true);
     try {
-      const { data, error } = await getSupabaseBrowserClient()
-        .from('reviews')
-        .select('*')
-        .eq('product_id', product.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const { rows } = await apiRequest<{ rows: any[] }>(
+        `/api/reviews?productId=${encodeURIComponent(product.id)}`
+      );
 
-      const reviewsData = (data || []).map((review) => ({
+      const reviewsData = (rows || []).map((review) => ({
         ...(review.raw || {}),
         id: review.id,
         productId: review.product_id,
@@ -205,10 +202,10 @@ const ProductDetailPage: React.FC = () => {
         },
       };
 
-      const { error } = await getSupabaseBrowserClient()
-        .from('reviews')
-        .insert(reviewData);
-      if (error) throw error;
+      await apiRequest('/api/reviews', {
+        method: 'POST',
+        body: JSON.stringify({ review: reviewData }),
+      });
 
       // Reset form and close modal
       setReviewForm({ rating: 5, comment: '', userName: '' });
@@ -234,11 +231,9 @@ const ProductDetailPage: React.FC = () => {
     }
 
     try {
-      const { error } = await getSupabaseBrowserClient()
-        .from('reviews')
-        .delete()
-        .eq('id', reviewId);
-      if (error) throw error;
+      await apiRequest(`/api/reviews?id=${encodeURIComponent(reviewId)}`, {
+        method: 'DELETE',
+      });
       await fetchReviews();
     } catch (error) {
       console.error('Error deleting review:', error);

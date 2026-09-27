@@ -1,8 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  createSupabaseServerClient,
-  getSupabaseBrowserClient,
-} from './client';
+import { apiRequest } from '@/lib/api/browser';
 import { getPublicStorageUrl } from './storage';
 
 type JsonRecord = Record<string, any>;
@@ -122,22 +118,19 @@ export function mapHomePageSectionRow(row: JsonRecord): JsonRecord {
   };
 }
 
-async function fetchProducts(client: SupabaseClient): Promise<JsonRecord[]> {
-  const { data, error } = await client
-    .from('products')
-    .select('*')
-    .order('created_at', { ascending: false, nullsFirst: false });
-
-  if (error) throw error;
-  return (data || []).map(mapProductRow);
-}
-
 export async function getProducts(): Promise<JsonRecord[]> {
-  return fetchProducts(getSupabaseBrowserClient());
+  const { rows } = await apiRequest<{ rows: JsonRecord[] }>('/api/catalog?kind=products');
+  return (rows || []).map(mapProductRow);
 }
 
 export async function getServerProducts(): Promise<JsonRecord[]> {
-  return fetchProducts(createSupabaseServerClient());
+  const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+  const { data, error } = await getSupabaseAdminClient()
+    .from('products')
+    .select('*')
+    .order('created_at', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data || []).map(mapProductRow);
 }
 
 export async function getProductByIdOrSlug(
@@ -152,34 +145,15 @@ export async function getProductByIdOrSlug(
 }
 
 export async function getHomePageSections(): Promise<JsonRecord[]> {
-  const { data, error } = await getSupabaseBrowserClient()
-    .from('home_page_sections')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true, nullsFirst: false });
-
-  if (error) throw error;
-  return (data || []).map(mapHomePageSectionRow);
+  const { rows } = await apiRequest<{ rows: JsonRecord[] }>('/api/catalog?kind=sections');
+  return (rows || []).map(mapHomePageSectionRow);
 }
 
 export async function getSellerProfiles(): Promise<JsonRecord[]> {
-  const client = getSupabaseBrowserClient();
-  const { data: sellers, error: sellersError } = await client
-    .from('sellers')
-    .select('*')
-    .eq('is_active', true);
-
-  if (sellersError) throw sellersError;
-
-  const userIds = (sellers || []).map((seller) => seller.user_id).filter(Boolean);
-  if (!userIds.length) return [];
-
-  const { data: profiles, error: profilesError } = await client
-    .from('profiles')
-    .select('*')
-    .in('id', userIds);
-
-  if (profilesError) throw profilesError;
+  const { sellers, profiles } = await apiRequest<{
+    sellers: JsonRecord[];
+    profiles: JsonRecord[];
+  }>('/api/catalog?kind=sellers');
   const byId = new Map((profiles || []).map((row) => [row.id, mapProfileRow(row)]));
 
   return (sellers || []).map((seller) => ({

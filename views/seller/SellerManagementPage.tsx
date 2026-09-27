@@ -18,7 +18,7 @@ import {
 } from '@/lib/supabase/admin';
 import { addSellerEmail } from '@/lib/auth/sellerSetup';
 import { approveSellerApplication, rejectSellerApplication } from '@/lib/auth';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { dataQuery } from '@/lib/api/data';
 import ProductCategoryPicker from '@/components/seller/ProductCategoryPicker';
 
 interface Seller {
@@ -541,36 +541,38 @@ const SellerManagementPageMobile: React.FC = () => {
 
       const profileId = crypto.randomUUID();
       const now = new Date().toISOString();
-      const client = getSupabaseBrowserClient();
 
-      const { error: profileError } = await client.from('profiles').upsert({
-        id: profileId,
-        email: newSellerData.email,
-        display_name: newSellerData.name,
-        phone: newSellerData.phone,
-        address: newSellerData.address,
-        role: 'shop',
-        created_at: now,
-        updated_at: now,
-        raw: {
-          uid: profileId,
-          name: newSellerData.name,
+      await dataQuery({
+        table: 'profiles',
+        action: 'upsert',
+        data: {
+          id: profileId,
           email: newSellerData.email,
+          display_name: newSellerData.name,
           phone: newSellerData.phone,
-          role: 'shop',
-          status: 'approved',
-          businessName: newSellerData.businessName,
-          businessType: newSellerData.businessType,
           address: newSellerData.address,
-          stats: {
-            totalProducts: 0,
-            totalSales: 0,
-            totalOrders: 0,
-            rating: 0,
+          role: 'shop',
+          created_at: now,
+          updated_at: now,
+          raw: {
+            uid: profileId,
+            name: newSellerData.name,
+            email: newSellerData.email,
+            phone: newSellerData.phone,
+            role: 'shop',
+            status: 'approved',
+            businessName: newSellerData.businessName,
+            businessType: newSellerData.businessType,
+            address: newSellerData.address,
+            stats: {
+              totalProducts: 0,
+              totalSales: 0,
+              totalOrders: 0,
+              rating: 0,
+            },
           },
         },
       });
-      if (profileError) throw profileError;
 
       await addSellerEmail(newSellerData.email, profileId);
 

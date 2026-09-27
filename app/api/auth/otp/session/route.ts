@@ -8,8 +8,9 @@ import {
   phonesMatch,
   verifyMsg91AccessToken,
 } from '@/lib/msg91/verify-access-token';
+import { applySessionCookies } from '@/lib/server/auth-session';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,11 +148,19 @@ export async function POST(request: NextRequest) {
       profile.email
     );
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       access_token: session.access_token,
       refresh_token: session.refresh_token,
       msg91_verified_by: verified.verifiedBy,
     });
+    return applySessionCookies(response, {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_in: 3600,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'bearer',
+      user: null,
+    } as Session);
   } catch (error: unknown) {
     console.error('OTP session error:', error);
     const message =

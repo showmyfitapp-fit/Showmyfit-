@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { dataQuery } from '@/lib/api/data';
 
 export const addSellerEmail = async (email: string, userId?: string) => {
   if (!email || !email.includes('@')) {
@@ -7,41 +7,45 @@ export const addSellerEmail = async (email: string, userId?: string) => {
 
   const normalized = email.trim().toLowerCase();
   const now = new Date().toISOString();
-  const { error } = await getSupabaseBrowserClient().from('sellers').upsert({
-    id: normalized,
-    email: normalized,
-    user_id: userId || normalized,
-    is_active: true,
-    role: 'seller',
-    approved_at: now,
-    raw: {
+  await dataQuery({
+    table: 'sellers',
+    action: 'upsert',
+    data: {
+      id: normalized,
       email: normalized,
-      role: 'shop',
-      isActive: true,
-      createdAt: now,
+      user_id: userId || normalized,
+      is_active: true,
+      role: 'seller',
+      approved_at: now,
+      raw: {
+        email: normalized,
+        role: 'shop',
+        isActive: true,
+        createdAt: now,
+      },
     },
   });
-  if (error) throw error;
 };
 
 export const removeSellerEmail = async (email: string) => {
   const normalized = email.trim().toLowerCase();
-  const { error } = await getSupabaseBrowserClient()
-    .from('sellers')
-    .delete()
-    .eq('id', normalized);
-  if (error) throw error;
+  await dataQuery({
+    table: 'sellers',
+    action: 'delete',
+    filters: [{ op: 'eq', column: 'id', value: normalized }],
+  });
 };
 
 export const isSellerEmail = async (email: string): Promise<boolean> => {
   try {
     const normalized = email.trim().toLowerCase();
-    const { data, error } = await getSupabaseBrowserClient()
-      .from('sellers')
-      .select('id')
-      .eq('id', normalized)
-      .maybeSingle();
-    if (error) throw error;
+    const data = await dataQuery<any>({
+      table: 'sellers',
+      action: 'select',
+      columns: 'id',
+      filters: [{ op: 'eq', column: 'id', value: normalized }],
+      maybeSingle: true,
+    });
     return Boolean(data);
   } catch {
     return false;

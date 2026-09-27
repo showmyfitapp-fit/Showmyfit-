@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestUser, isAdminEmail } from '@/lib/server/request-user';
+import { getRequestUser, isAdminEmail, resolveAccountKeys } from '@/lib/server/request-user';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
 export const dynamic = 'force-dynamic';
@@ -10,19 +10,22 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
 
     const scope = request.nextUrl.searchParams.get('scope') || 'mine';
+    const admin = await isAdminEmail(user.email);
     let query = getSupabaseAdminClient()
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (scope === 'all') {
-      if (!(await isAdminEmail(user.email))) {
+    if (scope === 'all' || (admin && (scope === 'seller' || scope === 'mine'))) {
+      if (!admin) {
         return NextResponse.json({ error: 'Admin only' }, { status: 403 });
       }
     } else if (scope === 'seller') {
-      query = query.eq('seller_id', user.id);
+      const keys = await resolveAccountKeys(user);
+      query = query.in('seller_id', keys.length ? keys : [user.id]);
     } else {
-      query = query.eq('user_id', user.id);
+      const keys = await resolveAccountKeys(user);
+      query = query.in('user_id', keys.length ? keys : [user.id]);
     }
 
     const { data, error } = await query;

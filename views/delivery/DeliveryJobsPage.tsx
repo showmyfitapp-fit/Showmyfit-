@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Bike,
   CheckCircle,
+  IndianRupee,
   KeyRound,
   MapPin,
   Navigation,
   Package,
   Phone,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
@@ -19,19 +21,260 @@ import {
   acceptDeliveryJob,
   completeDeliveryJob,
   enableDeliveryPartner,
-  getDeliveryPartner,
+  fetchDeliveryJobByOrderId,
   fetchDeliveryJobs,
+  getDeliveryPartner,
   isDeliveryPartner,
   mapsUrl,
   setDeliveryPartnerOnline,
   verifyPickupOtp,
   type DeliveryJob,
 } from '@/lib/delivery';
+import { fetchOrderById } from '@/lib/orders/store';
 import { subscribeTable } from '@/lib/realtime/subscribe';
+import type { OrderItem, OrderRecord } from '@/lib/orders/types';
+
+function readFocusOrderId(pathId?: string) {
+  if (typeof window === 'undefined') return pathId || null;
+  const fromQuery = new URLSearchParams(window.location.search).get('order');
+  const fromPath = window.location.pathname.split('/').filter(Boolean)[1];
+  return fromQuery || fromPath || pathId || null;
+}
+
+function isCashPayment(method?: string | null) {
+  return /cod|cash/i.test(method || '');
+}
+
+function itemVariant(item: OrderItem) {
+  return [item.size, item.color, item.brand].filter(Boolean).join(' · ');
+}
+
+function JobOrderDetail({
+  job,
+  order,
+  pickupValue,
+  dropValue,
+  onPickupChange,
+  onDropChange,
+  onAccept,
+  onPickup,
+  onDrop,
+}: {
+  job: DeliveryJob | null;
+  order: OrderRecord | null;
+  pickupValue: string;
+  dropValue: string;
+  onPickupChange: (value: string) => void;
+  onDropChange: (value: string) => void;
+  onAccept: () => void;
+  onPickup: () => void;
+  onDrop: () => void;
+}) {
+  const items = job?.items?.length ? job.items : order?.items || [];
+  const pickAddress = job?.pickAddress || order?.storeAddress || order?.storeLocation?.address || 'Store address unavailable';
+  const dropAddress = job?.dropAddress || order?.customerAddress || 'Customer address unavailable';
+  const pickLat = job?.pickLocation?.lat ?? order?.storeLocation?.lat;
+  const pickLng = job?.pickLocation?.lng ?? order?.storeLocation?.lng;
+  const dropLat = job?.dropLocation?.lat ?? order?.customerLocation?.lat;
+  const dropLng = job?.dropLocation?.lng ?? order?.customerLocation?.lng;
+  const storePhone = job?.storePhone || order?.storePhone;
+  const customerPhone = job?.customerPhone || order?.customerPhone || '';
+  const customerName = job?.customerName || order?.customerName || 'Customer';
+  const sellerName = job?.sellerName || order?.sellerName || 'Store';
+  const total = Number(job?.total || order?.total || 0);
+  const paymentMethod = order?.paymentMethod || 'razorpay';
+  const cash = isCashPayment(paymentMethod);
+  const status = job?.status || (order?.status === 'packed' ? 'available' : order?.status) || 'placed';
+
+  return (
+    <div id="delivery-order-detail" className="bg-white rounded-2xl border-2 border-orange-200 shadow-sm overflow-hidden">
+      <div className="p-5 border-b bg-orange-50/60">
+        <div className="flex flex-wrap justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Order details</p>
+            <p className="font-black text-2xl text-gray-900 mt-1">
+              {job?.orderNumber || order?.orderNumber || 'Order'}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{sellerName}</p>
+          </div>
+          <div className="text-right">
+            <span className="inline-block h-fit px-3 py-1 rounded-full text-xs font-bold bg-white text-orange-800 border border-orange-200">
+              {String(status).replaceAll('_', ' ')}
+            </span>
+            <p className="mt-2 text-lg font-black text-gray-900 flex items-center justify-end gap-1">
+              <IndianRupee className="w-4 h-4" />
+              {total.toLocaleString()}
+            </p>
+            <p className={`text-xs font-semibold ${cash ? 'text-amber-800' : 'text-green-700'}`}>
+              {cash ? 'Collect cash on delivery' : 'Already paid online'}
+            </p>
+          </div>
+        </div>
+        {(order?.distanceKm != null || order?.etaMinutes != null) && (
+          <p className="text-xs text-gray-600 mt-3">
+            {order.distanceKm != null ? `${order.distanceKm} km` : ''}
+            {order.distanceKm != null && order.etaMinutes != null ? ' · ' : ''}
+            {order.etaMinutes != null ? `~${order.etaMinutes} min` : ''}
+          </p>
+        )}
+      </div>
+
+      <div className="p-5 space-y-4 text-sm">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="p-3 rounded-xl bg-amber-50">
+            <p className="text-xs font-bold uppercase text-amber-800 mb-2 flex items-center gap-1">
+              <Store className="w-3 h-3" />
+              Pickup
+            </p>
+            <p className="font-semibold text-gray-900">{sellerName}</p>
+            <p className="text-gray-900 flex items-start gap-2 mt-1">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+              {pickAddress}
+            </p>
+            {storePhone && (
+              <a href={`tel:${storePhone}`} className="inline-flex items-center gap-1 text-amber-900 font-semibold mt-2">
+                <Phone className="w-3 h-3" />
+                {storePhone}
+              </a>
+            )}
+            <a
+              href={mapsUrl(pickLat, pickLng, pickAddress)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-orange-700 font-semibold mt-2 sm:ml-3"
+            >
+              <Navigation className="w-3 h-3" />
+              Navigate to store
+            </a>
+          </div>
+
+          <div className="p-3 rounded-xl bg-green-50">
+            <p className="text-xs font-bold uppercase text-green-800 mb-2">Drop</p>
+            <p className="font-semibold text-gray-900">{customerName}</p>
+            <p className="text-gray-900 flex items-start gap-2 mt-1">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+              {dropAddress}
+            </p>
+            {customerPhone && (
+              <a href={`tel:${customerPhone}`} className="inline-flex items-center gap-1 text-green-800 font-semibold mt-2">
+                <Phone className="w-3 h-3" />
+                {customerPhone}
+              </a>
+            )}
+            <a
+              href={mapsUrl(dropLat, dropLng, dropAddress)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-green-800 font-semibold mt-2 sm:ml-3"
+            >
+              <Navigation className="w-3 h-3" />
+              Navigate to customer
+            </a>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold uppercase text-gray-500 mb-2 flex items-center gap-1">
+            <Package className="w-3 h-3" />
+            Products
+          </p>
+          {items.length === 0 ? (
+            <p className="text-gray-500">No products on this order.</p>
+          ) : (
+            <div className="divide-y rounded-xl border overflow-hidden">
+              {items.map((item, index) => (
+                <div key={`${item.productId || 'item'}-${index}`} className="flex gap-3 p-3 bg-white">
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt=""
+                      className="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-lg bg-gray-100 shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900">{item.productName}</p>
+                    {itemVariant(item) && (
+                      <p className="text-xs text-gray-500">{itemVariant(item)}</p>
+                    )}
+                    <p className="text-xs text-gray-600 mt-1">
+                      Qty {item.quantity}
+                      {item.price ? ` · ₹${Number(item.price).toLocaleString()} each` : ''}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-gray-900">
+                    ₹{(Number(item.price || 0) * Number(item.quantity || 0)).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!job && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            {order?.status === 'cancelled'
+              ? 'This order was cancelled.'
+              : order?.status === 'delivered'
+                ? 'This order is already delivered.'
+                : 'Waiting for the seller to pack this order. The pickup job will appear here after it is packed.'}
+          </p>
+        )}
+
+        {job?.status === 'available' && (
+          <Button onClick={onAccept}>Accept pickup</Button>
+        )}
+
+        {job?.status === 'assigned' && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              <KeyRound className="w-3 h-3" />
+              Enter the seller pickup OTP
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Pickup OTP"
+              value={pickupValue}
+              onChange={(e) => onPickupChange(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
+            <Button onClick={onPickup}>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Verify pickup
+            </Button>
+          </div>
+        )}
+
+        {job?.status === 'picked_up' && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">Enter the customer delivery OTP</p>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Customer OTP"
+              value={dropValue}
+              onChange={(e) => onDropChange(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
+            <Button onClick={onDrop}>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Complete delivery
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const DeliveryJobsPage: React.FC = () => {
   const { currentUser, userData } = useAuth();
   const router = useRouter();
+  const params = useParams<{ id?: string }>();
   const [allowed, setAllowed] = useState(false);
   const [jobs, setJobs] = useState<DeliveryJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +285,10 @@ const DeliveryJobsPage: React.FC = () => {
   const [partnerName, setPartnerName] = useState('');
   const [isOnline, setIsOnline] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
-  const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(params.id || null);
+  const [focusJob, setFocusJob] = useState<DeliveryJob | null>(null);
+  const [focusOrder, setFocusOrder] = useState<OrderRecord | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = userData?.role === 'admin';
 
@@ -55,7 +301,21 @@ const DeliveryJobsPage: React.FC = () => {
       if (!partner) return;
       const rider = await getDeliveryPartner(currentUser.uid);
       setIsOnline(Boolean(rider?.isOnline));
-      setJobs(await fetchDeliveryJobs(isAdmin ? undefined : currentUser.uid));
+      const nextJobs = await fetchDeliveryJobs(isAdmin ? undefined : currentUser.uid);
+      setJobs(nextJobs);
+
+      const focusedId = readFocusOrderId(params.id);
+      if (focusedId) {
+        const [job, order] = await Promise.all([
+          fetchDeliveryJobByOrderId(focusedId).catch(() => null),
+          fetchOrderById(focusedId).catch(() => null),
+        ]);
+        setFocusJob(job);
+        setFocusOrder(order);
+      } else {
+        setFocusJob(null);
+        setFocusOrder(null);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -64,9 +324,8 @@ const DeliveryJobsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const fromPath = window.location.pathname.split('/').filter(Boolean)[1];
-    setFocusOrderId(fromPath || new URLSearchParams(window.location.search).get('order'));
-  }, []);
+    setFocusOrderId(readFocusOrderId(params.id));
+  }, [params.id]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -78,7 +337,12 @@ const DeliveryJobsPage: React.FC = () => {
         void load(true);
       },
     });
-  }, [currentUser, userData?.role]);
+  }, [currentUser, userData?.role, focusOrderId]);
+
+  useEffect(() => {
+    if (!focusOrderId || loading) return;
+    detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focusOrderId, loading, focusJob?.id, focusOrder?.id]);
 
   const handleEnableSelf = async () => {
     if (!currentUser) return;
@@ -172,6 +436,8 @@ const DeliveryJobsPage: React.FC = () => {
     );
   }
 
+  const listJobs = jobs.filter((job) => job.orderId !== focusOrderId);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="max-w-3xl mx-auto px-4 py-8">
@@ -193,7 +459,7 @@ const DeliveryJobsPage: React.FC = () => {
                 Enable me
               </Button>
             )}
-            <Button variant="secondary" onClick={load}>Refresh</Button>
+            <Button variant="secondary" onClick={() => load()}>Refresh</Button>
           </div>
         </div>
 
@@ -266,15 +532,45 @@ const DeliveryJobsPage: React.FC = () => {
 
         {loading ? (
           <div className="text-center py-16 text-gray-500">Loading jobs...</div>
-        ) : jobs.length === 0 ? (
-          <div className="bg-white rounded-2xl border p-12 text-center text-gray-500">
-            {!isOnline && !isAdmin
-              ? 'You are offline. Go online to receive new pickup jobs.'
-              : 'No active pickups. Jobs appear when a seller marks an order as packed.'}
-          </div>
         ) : (
           <div className="space-y-4">
-            {jobs.map((job) => (
+            {focusOrderId && (
+              <div ref={detailRef}>
+                {focusJob || focusOrder ? (
+                  <JobOrderDetail
+                    job={focusJob}
+                    order={focusOrder}
+                    pickupValue={focusJob?.id ? pickupInput[focusJob.id] || '' : ''}
+                    dropValue={focusJob?.id ? dropInput[focusJob.id] || '' : ''}
+                    onPickupChange={(value) => {
+                      if (!focusJob?.id) return;
+                      setPickupInput((prev) => ({ ...prev, [focusJob.id!]: value }));
+                    }}
+                    onDropChange={(value) => {
+                      if (!focusJob?.id) return;
+                      setDropInput((prev) => ({ ...prev, [focusJob.id!]: value }));
+                    }}
+                    onAccept={() => focusJob && handleAccept(focusJob)}
+                    onPickup={() => focusJob && handlePickup(focusJob)}
+                    onDrop={() => focusJob && handleDrop(focusJob)}
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border p-8 text-center text-gray-500">
+                    No order found for this delivery link.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!focusOrderId && jobs.length === 0 && (
+              <div className="bg-white rounded-2xl border p-12 text-center text-gray-500">
+                {!isOnline && !isAdmin
+                  ? 'You are offline. Go online to receive new pickup jobs.'
+                  : 'No active pickups. Jobs appear when a seller marks an order as packed.'}
+              </div>
+            )}
+
+            {listJobs.map((job) => (
               <div
                 key={job.id}
                 className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
@@ -285,6 +581,7 @@ const DeliveryJobsPage: React.FC = () => {
                   <div>
                     <p className="font-black text-lg">{job.orderNumber}</p>
                     <p className="text-sm text-gray-600">{job.sellerName}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">₹{Number(job.total || 0).toLocaleString()}</p>
                   </div>
                   <span className="h-fit px-3 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-800">
                     {job.status.replace('_', ' ')}
@@ -299,6 +596,12 @@ const DeliveryJobsPage: React.FC = () => {
                         <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                         {job.pickAddress}
                       </p>
+                      {job.storePhone && (
+                        <a href={`tel:${job.storePhone}`} className="inline-flex items-center gap-1 text-amber-900 mt-2">
+                          <Phone className="w-3 h-3" />
+                          {job.storePhone}
+                        </a>
+                      )}
                       <a
                         href={mapsUrl(job.pickLocation?.lat, job.pickLocation?.lng, job.pickAddress)}
                         target="_blank"
@@ -340,9 +643,10 @@ const DeliveryJobsPage: React.FC = () => {
                       Products
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {job.items.map((item) => (
-                        <span key={item.productId} className="text-xs bg-gray-50 px-3 py-2 rounded-lg">
+                      {job.items.map((item, index) => (
+                        <span key={`${item.productId || 'item'}-${index}`} className="text-xs bg-gray-50 px-3 py-2 rounded-lg">
                           {item.productName} × {item.quantity}
+                          {itemVariant(item) ? ` · ${itemVariant(item)}` : ''}
                         </span>
                       ))}
                     </div>

@@ -1,4 +1,11 @@
-import { getSupabaseBrowserClient } from './client';
+import { ensureAccessToken } from '@/lib/auth/session-client';
+import { createAuthedBrowserClient } from './client';
+
+async function storageClient() {
+  const token = await ensureAccessToken();
+  if (!token) throw new Error('Sign in required to use storage');
+  return createAuthedBrowserClient(token);
+}
 
 /** Public bucket used for product, profile, and banner images. */
 export const UPLOADS_BUCKET = 'uploads';
@@ -76,7 +83,7 @@ export async function uploadToSupabaseStorage(
   path: string,
   options?: { upsert?: boolean; contentType?: string }
 ): Promise<string> {
-  const client = getSupabaseBrowserClient();
+  const client = await storageClient();
   const contentType =
     options?.contentType ||
     (file instanceof File ? file.type : undefined) ||
@@ -103,7 +110,7 @@ export async function deleteFromSupabaseStorage(imageUrlOrPath: string): Promise
     return;
   }
 
-  const { error } = await getSupabaseBrowserClient()
+  const { error } = await (await storageClient())
     .storage.from(UPLOADS_BUCKET)
     .remove([path]);
 
@@ -114,7 +121,7 @@ export async function deleteFromSupabaseStorage(imageUrlOrPath: string): Promise
 
 export async function testSupabaseStorageConnection(): Promise<boolean> {
   try {
-    const { error } = await getSupabaseBrowserClient()
+    const { error } = await (await storageClient())
       .storage.from(UPLOADS_BUCKET)
       .list('', { limit: 1 });
     if (error) {

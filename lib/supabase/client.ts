@@ -24,14 +24,26 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     const { url, anonKey } = getConfig();
     browserClient = createClient(url, anonKey, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
       },
     });
   }
 
   return browserClient;
+}
+
+export function createAuthedBrowserClient(accessToken: string): SupabaseClient {
+  const { url, anonKey } = getConfig();
+  return createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 export function createSupabaseServerClient(): SupabaseClient {

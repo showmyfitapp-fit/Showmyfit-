@@ -19,13 +19,37 @@ export function mapPartner(row: Record<string, any>): DeliveryPartner {
   };
 }
 
-export async function findDeliveryPartner(userId: string): Promise<DeliveryPartner | null> {
+export async function findDeliveryPartner(
+  userId: string,
+  email?: string | null
+): Promise<DeliveryPartner | null> {
   const row = await findByIdOrAuthUserId('delivery_partners', userId);
-  return row ? mapPartner(row) : null;
+  if (row) return mapPartner(row);
+  if (email) {
+    const { data } = await getSupabaseAdminClient()
+      .from('delivery_partners')
+      .select('*')
+      .eq('id', email)
+      .maybeSingle();
+    if (data) return mapPartner(data);
+  }
+  return null;
 }
 
-export async function setPartnerOnline(userId: string, isOnline: boolean): Promise<DeliveryPartner> {
-  const partner = await findDeliveryPartner(userId);
+export async function setPartnerOnline(
+  userId: string,
+  isOnline: boolean,
+  options?: { email?: string | null; name?: string; createIfMissing?: boolean }
+): Promise<DeliveryPartner> {
+  let partner = await findDeliveryPartner(userId, options?.email);
+  if (!partner && options?.createIfMissing) {
+    await upsertDeliveryPartner({
+      userId,
+      name: options.name || 'Delivery partner',
+      authUserId: userId,
+    });
+    partner = await findDeliveryPartner(userId, options?.email);
+  }
   if (!partner) {
     throw new Error('Your account is not enabled as a delivery partner');
   }

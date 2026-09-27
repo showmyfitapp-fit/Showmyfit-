@@ -8,7 +8,6 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   getUserData,
   loginWithPhoneOtpSession,
@@ -23,6 +22,7 @@ import {
   type AppUser,
   type UserData,
 } from '@/lib/auth';
+import { restoreSession } from '@/lib/auth/session-client';
 
 interface AuthContextType {
   currentUser: AppUser | null;
@@ -90,28 +90,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   useEffect(() => {
-    const client = getSupabaseBrowserClient();
     let active = true;
-
-    client.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      if (error) console.error('Failed to restore Supabase session:', error);
-      void loadUser(data.session?.user || null);
-    });
-
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      // Defer profile queries until the auth callback releases its internal lock.
-      setTimeout(() => {
-        if (active) void loadUser(session?.user || null);
-      }, 0);
-    });
-
+    restoreSession()
+      .then((user) => {
+        if (active) void loadUser(user);
+      })
+      .catch((error) => {
+        console.error('Failed to restore session:', error);
+        if (active) void loadUser(null);
+      });
     return () => {
       active = false;
-      subscription.unsubscribe();
     };
   }, [loadUser]);
 
@@ -122,17 +111,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     role: 'user' | 'shop' | 'admin' = 'user',
     phone?: string,
     address?: string
-  ) => supabaseSignUp(email, password, displayName, role, phone, address);
+  ) => {
+    const data = await supabaseSignUp(email, password, displayName, role, phone, address);
+    await loadUser(data.user || null);
+    return data;
+  };
 
-  const signIn = async (email: string, password: string) =>
-    supabaseSignIn(email, password);
+  const signIn = async (email: string, password: string) => {
+    const data = await supabaseSignIn(email, password);
+    await loadUser(data.user || null);
+    return data;
+  };
 
-  const signOut = async () => signOutUser();
+  const signOut = async () => {
+    await signOutUser();
+    await loadUser(null);
+  };
 
   const refreshUserData = async () => {
-    const {
-      data: { user },
-    } = await getSupabaseBrowserClient().auth.getUser();
+    const user = await restoreSession();
     await loadUser(user);
   };
 
@@ -144,10 +141,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await signInWithFacebook();
   };
 
-  const loginWithPhoneOtp = async (
-    accessToken: string,
-    refreshToken: string
-  ) => loginWithPhoneOtpSession(accessToken, refreshToken);
+  const loginWithPhoneOtp = async (accessToken: string, refreshToken: string) => {
+    const data = await loginWithPhoneOtpSession(accessToken, refreshToken);
+    await loadUser(data.user || null);
+    return data;
+  };
 
   const value: AuthContextType = {
     currentUser,
@@ -156,8 +154,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     signUp,
     signIn,
     login: signIn,
-    signup: (email, password, displayName) =>
-      signUp(email, password, displayName),
+    signup: (email, password, displayName) => signUp(email, password, displayName),
     signOut,
     resetPassword: resetSupabasePassword,
     updatePassword: updateSupabasePassword,

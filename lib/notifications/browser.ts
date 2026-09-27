@@ -40,8 +40,8 @@ export function showSystemNotification(params: {
 
 export function notificationTargetUrl(type?: string, orderId?: string): string {
   if (type === 'delivery_pickup' || type === 'new_order_delivery' || type === 'pickup_ready') {
-    return orderId ? `/delivery/${orderId}` : '/delivery';
+    return orderId ? `/delivery?order=${orderId}` : '/delivery';
   }
-  if (type === 'cancelled') return orderId ? `/delivery/${orderId}` : '/profile';
+  if (type === 'cancelled') return orderId ? `/delivery?order=${orderId}` : '/profile';
   return orderId ? `/seller/orders?order=${orderId}` : '/seller/orders';
 }

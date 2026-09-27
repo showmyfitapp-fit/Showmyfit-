@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { apiRequest } from '@/lib/api/browser';
 import type { CartItem } from '@/contexts/CartContext';
 import { getUserLocation } from '@/utils/distance';
 import {
@@ -10,36 +10,10 @@ import { requestOrderAlert } from './alerts';
 import { createOrder } from './store';
 
 export async function fetchSellerShopInfo(sellerId: string): Promise<SellerShopInfo> {
-  const client = getSupabaseBrowserClient();
-  const { data: profile } = await client
-    .from('profiles')
-    .select('*')
-    .or(`id.eq.${sellerId},auth_user_id.eq.${sellerId}`)
-    .maybeSingle();
-
-  if (!profile) {
-    return { sellerId, sellerName: 'Store' };
-  }
-
-  const raw = (profile.raw || {}) as Record<string, any>;
-  const location = (raw.location || profile.location) as
-    | { lat?: number; lng?: number; address?: string }
-    | undefined;
-
-  return {
-    sellerId,
-    sellerName: raw.businessName || profile.display_name || raw.displayName || 'Store',
-    storeAddress: profile.address || raw.address || raw.businessAddress || location?.address,
-    storePhone: profile.phone || raw.phone,
-    storeLocation:
-      location?.lat && location?.lng
-        ? {
-            lat: location.lat,
-            lng: location.lng,
-            address: location.address || profile.address || raw.address || '',
-          }
-        : null,
-  };
+  const { seller } = await apiRequest<{ seller: SellerShopInfo }>(
+    `/api/orders/shop?sellerId=${encodeURIComponent(sellerId)}`
+  );
+  return seller || { sellerId, sellerName: 'Store' };
 }
 
 export async function createOrdersFromCart(params: {
