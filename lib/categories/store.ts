@@ -39,7 +39,12 @@ function flattenDefaults(): CategoryDocument[] {
 }
 
 async function readCategories(): Promise<CategoryDocument[]> {
-  const row = await getSetting(SETTINGS_ID);
+  let row: Awaited<ReturnType<typeof getSetting>> = null;
+  try {
+    row = await getSetting(SETTINGS_ID);
+  } catch {
+    return flattenDefaults();
+  }
   const list = Array.isArray(row?.data?.items) ? row!.data.items : null;
   if (!list || !list.length) {
     return flattenDefaults();

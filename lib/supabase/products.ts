@@ -119,6 +119,7 @@ export function mapHomePageSectionRow(row: JsonRecord): JsonRecord {
 }
 
 export async function getProducts(): Promise<JsonRecord[]> {
+  if (typeof window === 'undefined') return getServerProducts();
   const { rows } = await apiRequest<{ rows: JsonRecord[] }>('/api/catalog?kind=products');
   return (rows || []).map(mapProductRow);
 }
@@ -145,6 +146,16 @@ export async function getProductByIdOrSlug(
 }
 
 export async function getHomePageSections(): Promise<JsonRecord[]> {
+  if (typeof window === 'undefined') {
+    const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+    const { data, error } = await getSupabaseAdminClient()
+      .from('home_page_sections')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    return (data || []).map(mapHomePageSectionRow);
+  }
   const { rows } = await apiRequest<{ rows: JsonRecord[] }>('/api/catalog?kind=sections');
   return (rows || []).map(mapHomePageSectionRow);
 }

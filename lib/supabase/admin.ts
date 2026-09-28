@@ -314,6 +314,16 @@ export async function deleteHomePageSection(sectionId: string): Promise<void> {
 }
 
 export async function getSetting(id: string): Promise<JsonRecord | null> {
+  if (typeof window === 'undefined') {
+    const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+    const { data, error } = await getSupabaseAdminClient()
+      .from('settings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
   return dataQuery<JsonRecord | null>({
     table: 'settings',
     action: 'select',
@@ -323,10 +333,17 @@ export async function getSetting(id: string): Promise<JsonRecord | null> {
 }
 
 export async function upsertSetting(id: string, data: JsonRecord): Promise<void> {
+  const payload = { id, data, updated_at: nowIso() };
+  if (typeof window === 'undefined') {
+    const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+    const { error } = await getSupabaseAdminClient().from('settings').upsert(payload);
+    if (error) throw error;
+    return;
+  }
   await dataQuery({
     table: 'settings',
     action: 'upsert',
-    data: { id, data, updated_at: nowIso() },
+    data: payload,
   });
 }
 
