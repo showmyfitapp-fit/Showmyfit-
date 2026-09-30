@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, type Session, type User } from '@supabase/supabase-js';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
@@ -39,6 +40,25 @@ export function getAnonAuthClient() {
   });
 }
 
+function readPkceVerifier(request: NextRequest, bag: { pkce?: string }) {
+  const raw = bag.pkce || request.cookies.get(PKCE_COOKIE)?.value || '';
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function normalizeVerifier(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === 'string' ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
 export function getPkceAuthClient(request: NextRequest, bag: { pkce?: string }) {
   const { url, anonKey } = publicConfig();
   return createClient(url, anonKey, {
@@ -49,13 +69,12 @@ export function getPkceAuthClient(request: NextRequest, bag: { pkce?: string }) 
       detectSessionInUrl: false,
       storage: {
         getItem: (key) => {
-          if (key.endsWith('-code-verifier')) {
-            return bag.pkce ?? request.cookies.get(PKCE_COOKIE)?.value ?? null;
-          }
-          return null;
+          if (!key.endsWith('-code-verifier')) return null;
+          const verifier = readPkceVerifier(request, bag);
+          return verifier ? JSON.stringify(verifier) : null;
         },
         setItem: (key, value) => {
-          if (key.endsWith('-code-verifier')) bag.pkce = value;
+          if (key.endsWith('-code-verifier')) bag.pkce = normalizeVerifier(value);
         },
         removeItem: (key) => {
           if (key.endsWith('-code-verifier')) bag.pkce = '';
@@ -63,6 +82,34 @@ export function getPkceAuthClient(request: NextRequest, bag: { pkce?: string }) 
       },
     },
   });
+}
+
+export async function exchangePkceCode(code: string, verifier: string) {
+  const { url, anonKey } = publicConfig();
+  const response = await fetch(`${url}/auth/v1/token?grant_type=pkce`, {
+    method: 'POST',
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      auth_code: code,
+      code_verifier: normalizeVerifier(verifier),
+    }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as Session & {
+    error?: string;
+    error_description?: string;
+    msg?: string;
+    user?: User;
+  };
+  if (!response.ok || !payload.access_token || !payload.refresh_token) {
+    throw new Error(
+      payload.error_description || payload.msg || payload.error || 'OAuth exchange failed'
+    );
+  }
+  return payload;
 }
 
 export function readAccessToken(request: NextRequest) {
@@ -83,7 +130,9 @@ export function applySessionCookies(response: NextResponse, session: Session) {
 }
 
 export function applyPkceCookie(response: NextResponse, verifier: string, nextPath?: string) {
-  if (verifier) response.cookies.set(PKCE_COOKIE, verifier, cookieBase(10 * 60));
+  if (verifier) {
+    response.cookies.set(PKCE_COOKIE, encodeURIComponent(normalizeVerifier(verifier)), cookieBase(10 * 60));
+  }
   if (nextPath) response.cookies.set(NEXT_COOKIE, nextPath, cookieBase(10 * 60));
   return response;
 }
@@ -143,4 +192,35 @@ export function requestOrigin(request: NextRequest) {
   const proto = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '');
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
   return `${proto}://${host}`;
+}
+
+export function oauthRedirectOrigin(request: NextRequest) {
+  return requestOrigin(request);
+}
+
+export function createPkcePair() {
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
+}
+
+export function buildOAuthAuthorizeUrl(
+  provider: 'google' | 'facebook',
+  redirectTo: string,
+  challenge: string
+) {
+  const { url } = publicConfig();
+  const params = new URLSearchParams({
+    provider,
+    redirect_to: redirectTo,
+    code_challenge: challenge,
+    code_challenge_method: 's256',
+  });
+  return `${url}/auth/v1/authorize?${params.toString()}`;
+}
+
+export function readOAuthVerifier(request: NextRequest) {
+  const fromQuery = request.nextUrl.searchParams.get('cv') || '';
+  if (fromQuery) return normalizeVerifier(fromQuery);
+  return readPkceVerifier(request, {});
 }

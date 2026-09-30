@@ -61,7 +61,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
       } else {
         await loginWithFacebook();
       }
-      onClose();
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {

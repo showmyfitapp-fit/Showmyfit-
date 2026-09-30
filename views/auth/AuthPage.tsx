@@ -48,6 +48,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
   } = useAuth();
 
   useEffect(() => {
+    const oauthError = searchParams.get('error');
+    if (oauthError) setError(oauthError);
+  }, [searchParams]);
+
+  useEffect(() => {
     if (
       modeFromUrl === 'reset' ||
       modeFromUrl === 'forgot' ||
@@ -150,7 +155,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     try {
       if (provider === 'google') await loginWithGoogle();
       else await loginWithFacebook();
-      router.push('/profile');
     } catch (err: any) {
       console.error('Social auth error:', err);
       setError(err.message || 'An error occurred');

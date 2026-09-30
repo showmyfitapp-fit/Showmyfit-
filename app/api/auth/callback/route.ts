@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   applySessionCookies,
-  getPkceAuthClient,
-  NEXT_COOKIE,
-  requestOrigin,
+  exchangePkceCode,
+  oauthRedirectOrigin,
+  readOAuthVerifier,
 } from '@/lib/server/auth-session';
 import { ensureProfileRow, updateProfileRow } from '@/lib/server/profile';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const origin = requestOrigin(request);
-  const nextRaw = request.cookies.get(NEXT_COOKIE)?.value || '/profile';
+  const origin = oauthRedirectOrigin(request);
+  const nextRaw = request.nextUrl.searchParams.get('next') || '/profile';
   const next = nextRaw.startsWith('/') ? nextRaw : '/profile';
   const code = request.nextUrl.searchParams.get('code');
   const errorDescription = request.nextUrl.searchParams.get('error_description');
@@ -23,17 +23,31 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const bag: { pkce?: string } = {};
-    const { data, error } = await getPkceAuthClient(request, bag).auth.exchangeCodeForSession(code);
-    if (error || !data.session || !data.user) {
-      throw new Error(error?.message || 'OAuth exchange failed');
+    const verifier = readOAuthVerifier(request);
+    if (!verifier) {
+      throw new Error('Sign-in session expired. Please try Google login again.');
     }
 
-    const profile = await ensureProfileRow(data.user);
+    const tokens = await exchangePkceCode(code, verifier);
+    let user = tokens.user;
+    if (!user) {
+      const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+      const { data } = await getSupabaseAdminClient().auth.getUser(tokens.access_token);
+      user = data.user || undefined;
+    }
+    if (!user) throw new Error('Google sign in did not return a user');
+
+    const profile = await ensureProfileRow(user);
     await updateProfileRow(String(profile.id), { lastLoginAt: new Date().toISOString() });
 
     const response = NextResponse.redirect(`${origin}${next}`);
-    return applySessionCookies(response, data.session);
+    return applySessionCookies(response, {
+      ...tokens,
+      user,
+      token_type: tokens.token_type || 'bearer',
+      expires_in: tokens.expires_in || 3600,
+      expires_at: tokens.expires_at || Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'OAuth sign in failed';
     return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(message)}`);

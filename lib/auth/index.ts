@@ -111,7 +111,8 @@ export async function signInWithGoogle() {
     method: 'POST',
     body: JSON.stringify({ provider: 'google', next: '/profile' }),
   });
-  window.location.href = url;
+  if (!url) throw new Error('Could not start Google sign in');
+  window.location.assign(url);
   return { url };
 }
 
@@ -120,7 +121,8 @@ export async function signInWithFacebook() {
     method: 'POST',
     body: JSON.stringify({ provider: 'facebook', next: '/profile' }),
   });
-  window.location.href = url;
+  if (!url) throw new Error('Could not start Facebook sign in');
+  window.location.assign(url);
   return { url };
 }
 

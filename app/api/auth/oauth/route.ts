@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   applyPkceCookie,
-  getPkceAuthClient,
-  requestOrigin,
+  buildOAuthAuthorizeUrl,
+  createPkcePair,
+  oauthRedirectOrigin,
 } from '@/lib/server/auth-session';
 
 export const dynamic = 'force-dynamic';
@@ -15,25 +16,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
     }
 
-    const origin = requestOrigin(request);
+    const origin = oauthRedirectOrigin(request);
     const next = body.next && body.next.startsWith('/') ? body.next : '/profile';
-    const bag: { pkce?: string } = {};
-    const { data, error } = await getPkceAuthClient(request, bag).auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${origin}/api/auth/callback`,
-        skipBrowserRedirect: true,
-      },
-    });
-    if (error || !data.url) {
-      return NextResponse.json(
-        { error: error?.message || 'Could not start OAuth' },
-        { status: 400 }
-      );
-    }
+    const { verifier, challenge } = createPkcePair();
+    const redirectTo = `${origin}/api/auth/callback?cv=${encodeURIComponent(verifier)}&next=${encodeURIComponent(next)}`;
+    const url = buildOAuthAuthorizeUrl(provider, redirectTo, challenge);
 
-    const response = NextResponse.json({ url: data.url });
-    applyPkceCookie(response, bag.pkce || '', next);
+    const response = NextResponse.json({ url });
+    applyPkceCookie(response, verifier, next);
     return response;
   } catch (error) {
     return NextResponse.json(
