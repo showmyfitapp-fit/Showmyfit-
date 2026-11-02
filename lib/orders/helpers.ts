@@ -1,6 +1,7 @@
 import { estimateDeliveryMinutes, getDistance } from '@/utils/distance';
 import type { CartItem } from '@/contexts/CartContext';
-import type { GeoPoint, OrderItem, OrderRecord, StoreLocation } from './types';
+import type { GeoPoint, OrderItem, OrderRecord, PaymentStatus, StoreLocation } from './types';
+import { applyCoupon } from '@/lib/ops/rules';
 
 const PACK_SLA_MINUTES = 30;
 
@@ -79,8 +80,11 @@ export function buildOrderDraft(params: {
   customerPhone: string;
   customerAddress?: string;
   customerLocation?: GeoPoint | null;
-  paymentId: string;
-  razorpayOrderId: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  paymentMethod?: string;
+  paymentStatus?: PaymentStatus;
+  couponCode?: string;
 }): Omit<OrderRecord, 'id'> {
   const subtotal = params.items.reduce(
     (sum, item) => sum + (item.originalPrice || item.price) * item.quantity,
@@ -90,10 +94,13 @@ export function buildOrderDraft(params: {
     (sum, item) => sum + ((item.originalPrice || item.price) - item.price) * item.quantity,
     0
   );
-  const total = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const merchandise = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const coupon = applyCoupon(merchandise, params.couponCode);
+  const total = coupon.amount;
+  const paymentMethod = params.paymentMethod || 'razorpay';
   const { distanceKm, etaMinutes } = computeDistanceAndEta(
     params.customerLocation,
-    params.storeLocation
+    params.seller.storeLocation
   );
   const now = new Date();
   const packByDeadline = new Date(now.getTime() + PACK_SLA_MINUTES * 60 * 1000);
@@ -115,13 +122,15 @@ export function buildOrderDraft(params: {
     storePhone: params.seller.storePhone,
     items: cartItemsToOrderItems(params.items),
     status: 'placed',
-    paymentStatus: 'paid',
-    paymentMethod: 'razorpay',
+    paymentStatus: params.paymentStatus || (paymentMethod === 'cod' ? 'pending' : 'paid'),
+    paymentMethod,
     paymentId: params.paymentId,
     razorpayOrderId: params.razorpayOrderId,
     subtotal,
-    discount,
+    discount: discount + coupon.discount,
     shipping: 0,
+    tax: 0,
+    fees: 0,
     total,
     distanceKm,
     etaMinutes,

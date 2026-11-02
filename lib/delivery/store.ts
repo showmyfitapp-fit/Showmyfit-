@@ -203,7 +203,11 @@ export async function verifyPickupOtp(jobId: string, enteredOtp: string): Promis
   return true;
 }
 
-export async function completeDeliveryJob(jobId: string, customerOtp: string): Promise<boolean> {
+export async function completeDeliveryJob(
+  jobId: string,
+  customerOtp: string,
+  proof?: { photoUrl?: string; lat?: number; lng?: number }
+): Promise<boolean> {
   const { job: row } = await apiRequest<{ job: { order_id?: string } | null }>(
     `/api/delivery/jobs/${jobId}`
   );
@@ -212,7 +216,14 @@ export async function completeDeliveryJob(jobId: string, customerOtp: string): P
   if (!ok) return false;
   await apiRequest(`/api/delivery/jobs/${jobId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fields: { status: 'delivered' } }),
+    body: JSON.stringify({
+      fields: {
+        status: 'delivered',
+        ...(proof?.photoUrl ? { pod_photo_url: proof.photoUrl } : {}),
+        ...(proof?.lat != null ? { pod_lat: proof.lat } : {}),
+        ...(proof?.lng != null ? { pod_lng: proof.lng } : {}),
+      },
+    }),
   });
   await requestOrderAlert('delivered', String(row.order_id));
   return true;

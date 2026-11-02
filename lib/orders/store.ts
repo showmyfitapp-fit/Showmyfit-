@@ -36,6 +36,13 @@ export function mapOrderRow(row: Record<string, any>): OrderRecord {
     paymentMethod: String(row.payment_method || 'razorpay'),
     paymentId: row.payment_id ? String(row.payment_id) : undefined,
     razorpayOrderId: row.razorpay_order_id ? String(row.razorpay_order_id) : undefined,
+    paymentAttemptId: row.payment_attempt_id ? String(row.payment_attempt_id) : undefined,
+    refundId: row.refund_id ? String(row.refund_id) : undefined,
+    refundAmount: row.refund_amount != null ? Number(row.refund_amount) : undefined,
+    codCollected: Boolean(row.cod_collected),
+    cancelReason: row.cancel_reason ? String(row.cancel_reason) : undefined,
+    tax: Number(row.tax || 0),
+    fees: Number(row.fees || 0),
     subtotal: Number(row.subtotal || 0),
     discount: Number(row.discount || 0),
     shipping: Number(row.shipping || 0),
@@ -174,6 +181,17 @@ export async function verifyDeliveryOtp(orderId: string, enteredOtp: string): Pr
   if (!order.deliveryPartnerId) return false;
   if (!order.deliveryOtp || order.deliveryOtp !== enteredOtp.trim()) return false;
   await updateOrderStatus(orderId, 'delivered', { deliveryOtpVerified: true });
+  if (/cod|cash/i.test(order.paymentMethod)) {
+    try {
+      await updateOrderFields(orderId, {
+        payment_status: 'paid',
+        cod_collected: true,
+        cod_collected_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.warn('COD collection flag skipped:', error);
+    }
+  }
   return true;
 }
 

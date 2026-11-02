@@ -30,7 +30,7 @@ import {
   verifyPickupOtp,
   type DeliveryJob,
 } from '@/lib/delivery';
-import { fetchOrderById } from '@/lib/orders/store';
+import { fetchOrderById, updateOrderStatus } from '@/lib/orders/store';
 import { subscribeTable } from '@/lib/realtime/subscribe';
 import type { OrderItem, OrderRecord } from '@/lib/orders/types';
 
@@ -223,7 +223,7 @@ function JobOrderDetail({
         )}
 
         {job?.status === 'available' && (
-          <Button onClick={onAccept}>Accept pickup</Button>
+          <Button onClick={onAccept}>Pick</Button>
         )}
 
         {job?.status === 'assigned' && (
@@ -398,13 +398,36 @@ const DeliveryJobsPage: React.FC = () => {
 
   const handleDrop = async (job: DeliveryJob) => {
     if (!job.id) return;
-    const ok = await completeDeliveryJob(job.id, dropInput[job.id] || '');
+    const position = await new Promise<GeolocationPosition | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        () => resolve(null),
+        { timeout: 4000 }
+      );
+    });
+    const ok = await completeDeliveryJob(job.id, dropInput[job.id] || '', {
+      lat: position?.coords.latitude,
+      lng: position?.coords.longitude,
+    });
     if (!ok) {
       alert('Invalid customer OTP.');
       return;
     }
     setMessage(`Delivered ${job.orderNumber}`);
     await load();
+  };
+
+  const handleFailedDelivery = async (job: DeliveryJob) => {
+    if (!job.orderId) return;
+    const reason = window.prompt('Failed delivery reason (customer unreachable, address invalid, refused, other)') || 'unspecified';
+    try {
+      await updateOrderStatus(job.orderId, 'failed_delivery');
+      setMessage(`Marked ${job.orderNumber} as failed delivery (${reason})`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not mark failed delivery');
+    }
   };
 
   if (!currentUser) {
@@ -642,18 +665,32 @@ const DeliveryJobsPage: React.FC = () => {
                       <Package className="w-3 h-3" />
                       Products
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-2">
                       {job.items.map((item, index) => (
-                        <span key={`${item.productId || 'item'}-${index}`} className="text-xs bg-gray-50 px-3 py-2 rounded-lg">
-                          {item.productName} × {item.quantity}
-                          {itemVariant(item) ? ` · ${itemVariant(item)}` : ''}
-                        </span>
+                        <div key={`${item.productId || 'item'}-${index}`} className="flex gap-3 items-center">
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt=""
+                              className="w-12 h-12 rounded-lg object-cover bg-gray-100 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">{item.productName}</p>
+                            <p className="text-xs text-gray-500">
+                              Qty {item.quantity}
+                              {itemVariant(item) ? ` · ${itemVariant(item)}` : ''}
+                            </p>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
 
                   {job.status === 'available' && (
-                    <Button onClick={() => handleAccept(job)}>Accept pickup</Button>
+                    <Button onClick={() => handleAccept(job)}>Pick</Button>
                   )}
 
                   {job.status === 'assigned' && (
@@ -697,6 +734,9 @@ const DeliveryJobsPage: React.FC = () => {
                       <Button onClick={() => handleDrop(job)}>
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Complete delivery
+                      </Button>
+                      <Button variant="outline" onClick={() => handleFailedDelivery(job)}>
+                        Failed delivery
                       </Button>
                     </div>
                   )}

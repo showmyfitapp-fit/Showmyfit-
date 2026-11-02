@@ -8,7 +8,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import PhoneOtpLogin from '@/components/auth/PhoneOtpLogin';
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'reset';
-type LoginMethod = 'email' | 'otp';
 
 interface AuthPageProps {
   initialMode?: AuthMode;
@@ -24,7 +23,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     }
     return initialMode;
   });
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('otp');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,11 +38,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
   const router = useRouter();
   const {
     signUp,
-    signIn,
     resetPassword,
     updatePassword,
     loginWithGoogle,
-    loginWithFacebook,
   } = useAuth();
 
   useEffect(() => {
@@ -62,7 +58,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
       setMode(modeFromUrl);
       setError('');
       setSuccess('');
-      if (modeFromUrl !== 'login') setLoginMethod('email');
     }
   }, [modeFromUrl]);
 
@@ -126,12 +121,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
       }
 
       if (mode === 'login') {
-        await signIn(formData.email, formData.password);
-        router.push('/profile');
-      } else {
-        await signUp(formData.email, formData.password, formData.name, 'user', formData.phone);
-        router.push('/profile');
+        return;
       }
+
+      await signUp(formData.email, formData.password, formData.name, 'user', formData.phone);
+      router.push('/profile');
     } catch (err: any) {
       console.error('Auth error:', err);
       setError(getAuthErrorMessage(err, 'An error occurred. Please try again.'));
@@ -144,17 +138,15 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
     setMode(next);
     setError('');
     setSuccess('');
-    setLoginMethod(next === 'login' ? 'otp' : 'email');
     setFormData((prev) => ({ ...prev, password: '', confirmPassword: '' }));
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+  const handleSocialLogin = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      if (provider === 'google') await loginWithGoogle();
-      else await loginWithFacebook();
+      await loginWithGoogle();
     } catch (err: any) {
       console.error('Social auth error:', err);
       setError(err.message || 'An error occurred');
@@ -174,9 +166,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
 
   const subtitle =
     mode === 'login'
-      ? loginMethod === 'otp'
-        ? 'Sign in with your phone number.'
-        : 'Enter your details below.'
+      ? 'Sign in with your phone number.'
       : mode === 'signup'
         ? 'Start your journey with us today.'
         : mode === 'forgot'
@@ -184,18 +174,16 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
           : 'Choose a new password for your account.';
 
   const submitLabel =
-    mode === 'login'
-      ? 'Sign In'
-      : mode === 'signup'
-        ? 'Create Account'
-        : mode === 'forgot'
-          ? 'Send Reset Link'
-          : 'Update Password';
+    mode === 'signup'
+      ? 'Create Account'
+      : mode === 'forgot'
+        ? 'Send Reset Link'
+        : 'Update Password';
 
-  const showSocial = mode === 'login' || mode === 'signup';
-  const showPasswordField = mode === 'login' || mode === 'signup' || mode === 'reset';
-  const showOtpLogin = mode === 'login' && loginMethod === 'otp';
-  const showEmailForm = !showOtpLogin;
+  const showSocial = mode === 'signup';
+  const showPasswordField = mode === 'signup' || mode === 'reset';
+  const showOtpLogin = mode === 'login';
+  const showEmailForm = mode !== 'login';
 
   return (
     <div className="min-h-screen bg-white">
@@ -220,7 +208,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
           {showSocial && (
             <>
               <button
-                onClick={() => handleSocialLogin('google')}
+                onClick={() => handleSocialLogin()}
                 className="w-full flex items-center justify-center py-4 px-4 bg-gray-50 rounded-2xl border border-transparent hover:bg-gray-100 transition-all font-bold text-sm gap-2 text-gray-700"
               >
                 <svg className="w-5 h-5 block" viewBox="0 0 24 24">
@@ -235,45 +223,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
               <div className="relative flex items-center justify-center">
                 <div className="absolute inset-0 border-t border-gray-100"></div>
                 <span className="relative bg-white px-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
-                  {showOtpLogin ? 'Or with phone' : 'Or with email'}
+                  Or with email
                 </span>
               </div>
             </>
-          )}
-
-          {mode === 'login' && (
-            <div className="grid grid-cols-2 gap-2 p-1 bg-gray-50 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMethod('otp');
-                  setError('');
-                  setSuccess('');
-                }}
-                className={`py-3 rounded-xl text-sm font-bold transition-all ${
-                  loginMethod === 'otp'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Login with OTP
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMethod('email');
-                  setError('');
-                  setSuccess('');
-                }}
-                className={`py-3 rounded-xl text-sm font-bold transition-all ${
-                  loginMethod === 'email'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Email
-              </button>
-            </div>
           )}
 
           {showOtpLogin ? (
@@ -343,18 +296,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
               />
             )}
 
-            {mode === 'login' && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => switchMode('forgot')}
-                  className="text-xs font-bold text-gray-500 hover:text-black transition-colors"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading}
@@ -395,7 +336,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signup' }) => {
             </button>
           )}
 
-          {showSocial && (
+          {(mode === 'login' || mode === 'signup') && (
             <div className="pt-8 text-center">
               <Link
                 href="/become-seller"

@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     razorpay: {
         createOrder: '/api/razorpay/create-order',
         verifyPayment: '/api/razorpay/verify-payment',
+        webhook: '/api/razorpay/webhook',
     },
     products: `${API_BASE_URL}/api/products`,
     cart: `${API_BASE_URL}/api/cart`,

@@ -9,6 +9,7 @@ import {
   verifyMsg91AccessToken,
 } from '@/lib/msg91/verify-access-token';
 import { applySessionCookies } from '@/lib/server/auth-session';
+import { allowOtpAttempt } from '@/lib/server/order-side-effects';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 import { createClient, type Session } from '@supabase/supabase-js';
 
@@ -107,6 +108,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Enter a valid 10-digit Indian mobile number', code: 'invalid_phone' },
         { status: 400 }
+      );
+    }
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'local';
+    if (!allowOtpAttempt(`${ip}:${phone}`)) {
+      return NextResponse.json(
+        { error: 'Too many OTP attempts. Please wait 15 minutes.', code: 'otp_rate_limited' },
+        { status: 429 }
       );
     }
 

@@ -79,6 +79,12 @@ const SellerOrdersPage: React.FC = () => {
   const handleAdvance = async (order: OrderRecord) => {
     const next = NEXT_STATUS[order.status];
     if (!next || !order.id) return;
+    if (next === 'packed') {
+      const summary = order.items
+        .map((item) => `${item.productName} ${item.size || ''} ${item.color || ''} × ${item.quantity}`)
+        .join('\n');
+      if (!window.confirm(`Confirm SKU and quantity before ready for pickup:\n\n${summary}`)) return;
+    }
     await updateOrderStatus(order.id, next);
     if (next === 'packed') {
       try {
@@ -187,6 +193,13 @@ const SellerOrdersPage: React.FC = () => {
                       <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800">
                         {ORDER_STATUS_LABELS[order.status]}
                       </span>
+                      <p className="text-xs text-gray-600 mt-2">
+                        {/cod|cash/i.test(order.paymentMethod)
+                          ? 'Cash on delivery'
+                          : 'Paid online'}
+                        {' · '}
+                        {order.paymentStatus}
+                      </p>
                       {isOverdue && (
                         <p className="text-xs text-red-600 font-semibold mt-2 flex items-center justify-end gap-1">
                           <Clock className="w-3 h-3" />
@@ -235,11 +248,43 @@ const SellerOrdersPage: React.FC = () => {
                       {order.status === 'out_for_delivery' && (
                         <p>Out for delivery. The rider will collect the customer OTP.</p>
                       )}
-                      {order.items.map((item) => (
-                        <p key={item.productId} className="text-gray-700">
-                          {item.productName} × {item.quantity}
+                      {order.storeAddress && (
+                        <p className="flex items-start gap-2">
+                          <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                          Pickup: {order.storeAddress}
                         </p>
-                      ))}
+                      )}
+                      {order.customerAddress && (
+                        <p className="flex items-start gap-2">
+                          <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                          Drop: {order.customerAddress}
+                        </p>
+                      )}
+                      <div className="space-y-2 pt-1">
+                        {order.items.map((item, index) => (
+                          <div key={`${item.productId}-${index}`} className="flex gap-3">
+                            {item.image ? (
+                              <img
+                                src={item.image}
+                                alt=""
+                                className="w-12 h-12 rounded-lg object-cover bg-gray-100 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0" />
+                            )}
+                            <div>
+                              <p className="text-gray-900 font-medium">{item.productName}</p>
+                              <p className="text-xs text-gray-500">
+                                {[item.size, item.color].filter(Boolean).join(' · ') || 'Standard'}
+                                {' · '}
+                                Qty {item.quantity}
+                                {' · '}
+                                ₹{Number(item.price || 0).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-2">

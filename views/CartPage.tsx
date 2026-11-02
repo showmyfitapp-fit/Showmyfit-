@@ -28,6 +28,7 @@ import {
   fetchSellerShopInfo,
   groupCartBySeller,
 } from '@/lib/orders';
+import { applyCoupon, isOutsideDeliveryRadius } from '@/lib/ops/rules';
 
 const CartPage: React.FC = () => {
   const {
@@ -53,6 +54,8 @@ const CartPage: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
+  const [couponCode, setCouponCode] = useState('');
   const promptedLocationRef = useRef(false);
 
   useEffect(() => {
@@ -119,7 +122,9 @@ const CartPage: React.FC = () => {
   const subtotal = cartItems.reduce((sum, item) => sum + (item.originalPrice || item.price) * item.quantity, 0);
   const discount = cartItems.reduce((sum, item) => sum + ((item.originalPrice || item.price) - item.price) * item.quantity, 0);
   const shipping = 0; // Free shipping for now
-  const total = subtotal - discount + shipping;
+  const merchandiseTotal = subtotal - discount + shipping;
+  const coupon = applyCoupon(merchandiseTotal, couponCode);
+  const total = coupon.amount;
 
   // Handle checkout with Razorpay
   const handleCheckout = async () => {
@@ -142,7 +147,54 @@ const CartPage: React.FC = () => {
       return;
     }
 
+    const farShop = Object.values(shopDetails).find((shop: any) =>
+      isOutsideDeliveryRadius(shop?.distanceKm)
+    );
+    if (farShop && !window.confirm('A store is outside the 20 km delivery zone. Place the order anyway?')) {
+      return;
+    }
+
     setIsProcessingPayment(true);
+
+    const orderPayload = {
+      cartItems,
+      userId: currentUser.uid,
+      customerName: currentUser?.displayName || userData?.displayName || 'Customer',
+      customerEmail: currentUser?.email || userData?.email || '',
+      customerPhone: phone,
+      customerAddress: location.selectedAddress
+        ? formatDeliveryAddress(location.selectedAddress)
+        : userData?.address,
+      customerLocation:
+        location.selectedAddress?.latitude != null &&
+        location.selectedAddress?.longitude != null
+          ? {
+              lat: location.selectedAddress.latitude,
+              lng: location.selectedAddress.longitude,
+            }
+          : null,
+      couponCode: coupon.code,
+    };
+
+    if (paymentMethod === 'cod') {
+      try {
+        const created = await createOrdersFromCart({
+          ...orderPayload,
+          paymentMethod: 'cod',
+          paymentStatus: 'pending',
+        });
+        clearCart();
+        router.push(
+          `/orders/confirmation?pay=cod&n=${created.map((order) => order.orderNumber).join(',')}`
+        );
+      } catch (error: any) {
+        console.error('COD checkout error:', error);
+        alert(error.message || 'Failed to place the cash-on-delivery order. Please try again.');
+      } finally {
+        setIsProcessingPayment(false);
+      }
+      return;
+    }
 
     try {
       // Check if Razorpay is available
@@ -168,7 +220,9 @@ const CartPage: React.FC = () => {
         body: JSON.stringify({
           amount: total,
           currency: 'INR',
-          receipt: receipt
+          receipt: receipt,
+          coupon: coupon.code,
+          items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity })),
         }),
       });
 
@@ -215,7 +269,8 @@ const CartPage: React.FC = () => {
               body: JSON.stringify({
                 paymentId: response.razorpay_payment_id,
                 orderId: response.razorpay_order_id,
-                signature: response.razorpay_signature
+                signature: response.razorpay_signature,
+                amount: total,
               }),
             });
 
@@ -223,30 +278,18 @@ const CartPage: React.FC = () => {
 
             if (verifyData.verified) {
               const created = await createOrdersFromCart({
-                cartItems,
-                userId: currentUser!.uid,
-                customerName: currentUser?.displayName || userData?.displayName || 'Customer',
-                customerEmail: currentUser?.email || userData?.email || '',
-                customerPhone: phone,
-                customerAddress: location.selectedAddress
-                  ? formatDeliveryAddress(location.selectedAddress)
-                  : userData?.address,
-                customerLocation:
-                  location.selectedAddress?.latitude != null &&
-                  location.selectedAddress?.longitude != null
-                    ? {
-                        lat: location.selectedAddress.latitude,
-                        lng: location.selectedAddress.longitude,
-                      }
-                    : null,
+                ...orderPayload,
                 paymentId: response.razorpay_payment_id,
                 razorpayOrderId: response.razorpay_order_id,
+                paymentMethod: 'razorpay',
+                paymentStatus: 'paid',
               });
 
               clearCart();
-              alert(`Payment successful! ${created.length} order(s) placed. Track them in My Orders.`);
               setIsProcessingPayment(false);
-              router.push('/orders');
+              router.push(
+                `/orders/confirmation?pay=online&n=${created.map((order) => order.orderNumber).join(',')}`
+              );
             } else {
               throw new Error('Payment verification failed');
             }
@@ -272,6 +315,10 @@ const CartPage: React.FC = () => {
       };
 
       const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function () {
+        setIsProcessingPayment(false);
+        alert('Payment failed or was cancelled. No order was placed. You can try again.');
+      });
       rzp.open();
 
     } catch (error: any) {
@@ -607,6 +654,36 @@ const CartPage: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+                      Payment method
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('razorpay')}
+                        className={`px-3 py-3 rounded-xl text-sm font-bold border ${
+                          paymentMethod === 'razorpay'
+                            ? 'border-purple-500 bg-purple-50 text-purple-800'
+                            : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Online
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('cod')}
+                        className={`px-3 py-3 rounded-xl text-sm font-bold border ${
+                          paymentMethod === 'cod'
+                            ? 'border-purple-500 bg-purple-50 text-purple-800'
+                            : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Cash on delivery
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
                       Phone for delivery OTP (WhatsApp)
                     </label>
                     <input
@@ -642,12 +719,35 @@ const CartPage: React.FC = () => {
                     <span className="text-gray-900 font-bold">₹{subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center">
+                    <span className="text-gray-600 font-medium">Tax</span>
+                    <span className="text-gray-900 font-bold">₹0</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 font-medium">Fees</span>
+                    <span className="text-gray-900 font-bold">₹0</span>
+                  </div>
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-600 font-medium">Shipping</span>
                     <span className="text-green-600 text-sm font-black uppercase tracking-wide flex items-center gap-1">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                       FREE
                     </span>
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+                      Coupon
+                    </label>
+                    <input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      placeholder="LAUNCH10"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-medium"
+                    />
+                    {coupon.discount > 0 && (
+                      <p className="text-xs text-green-700 mt-1">Coupon applied: −₹{coupon.discount}</p>
+                    )}
+                  </div>
+
                   {discount > 0 && (
                     <div className="flex justify-between items-center bg-green-50 p-4 rounded-xl border border-green-100">
                       <span className="text-green-700 font-bold uppercase text-xs tracking-wide">Savings</span>
@@ -673,7 +773,7 @@ const CartPage: React.FC = () => {
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
-                        <span>Proceed to Checkout</span>
+                        <span>{paymentMethod === 'cod' ? 'Place COD order' : 'Pay online'}</span>
                         <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                       </>
                     )}
@@ -684,7 +784,7 @@ const CartPage: React.FC = () => {
                       🔒 Secure SSL Encryption
                     </p>
                     <p className="text-xs text-gray-400">
-                      Powered by Razorpay
+                      {paymentMethod === 'cod' ? 'Pay cash when the order arrives' : 'Powered by Razorpay'}
                     </p>
                   </div>
                 </div>

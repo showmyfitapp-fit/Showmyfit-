@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
         });
 
         // Razorpay credentials from environment variables
-        const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_live_SEWbFSuaVOCurS';
-        const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || 'QM2QJ9iF7uiAOtRLcEdoR8KQ';
+        const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+        const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
         if (!razorpayKeyId || !razorpayKeySecret) {
             console.error('❌ Razorpay keys missing');
@@ -74,9 +74,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Optional: Verify amount
-        if (amount && paymentData.amount !== Math.round(amount * 100)) {
-            console.warn(`⚠️ Amount mismatch: Expected ${amount * 100}, Got ${paymentData.amount}`);
+        if (amount && paymentData.amount !== Math.round(Number(amount) * 100)) {
+            return NextResponse.json(
+                { verified: false, error: 'Payment amount does not match the order total' },
+                { status: 400 }
+            );
         }
 
         console.log('✅ Payment verified successfully');

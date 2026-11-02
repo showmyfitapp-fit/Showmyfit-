@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, isAdminEmail, resolveAccountKeys } from '@/lib/server/request-user';
+import { adjustProductStock, logOrderEvent } from '@/lib/server/order-side-effects';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
 export const dynamic = 'force-dynamic';
@@ -47,12 +48,42 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { order?: Record<string, unknown> };
     if (!body.order) return NextResponse.json({ error: 'Order is required' }, { status: 400 });
 
-    const { data, error } = await getSupabaseAdminClient()
+    const paymentId = body.order.payment_id ? String(body.order.payment_id) : '';
+    const admin = getSupabaseAdminClient();
+    if (paymentId) {
+      const { data: existing } = await admin
+        .from('orders')
+        .select('id')
+        .eq('payment_id', paymentId)
+        .eq('seller_id', body.order.seller_id || '')
+        .maybeSingle();
+      if (existing?.id) {
+        return NextResponse.json({ id: existing.id });
+      }
+    }
+
+    const { data, error } = await admin
       .from('orders')
       .insert({ ...body.order, user_id: body.order.user_id || user.id })
       .select('id')
       .single();
     if (error) throw error;
+    const items = Array.isArray(body.order.items) ? body.order.items : [];
+    await adjustProductStock(
+      items.map((item: any) => ({
+        productId: item.productId || item.product_id,
+        quantity: item.quantity,
+      })),
+      'reserve'
+    );
+    await logOrderEvent({
+      orderId: data.id,
+      actorId: user.id,
+      actorRole: 'customer',
+      source: 'checkout',
+      toStatus: String(body.order.status || 'placed'),
+      reason: String(body.order.payment_method || 'razorpay'),
+    });
     return NextResponse.json({ id: data.id });
   } catch (error) {
     return NextResponse.json(

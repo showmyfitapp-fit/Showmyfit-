@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   browserNotificationPermission,
   notificationTargetUrl,
+  registerOrderAlertWorker,
   showSystemNotification,
 } from '@/lib/notifications/browser';
 import {
@@ -30,6 +31,7 @@ export function useOrderBrowserAlerts() {
 
   useEffect(() => {
     if (!currentUser?.uid) return;
+    registerOrderAlertWorker();
     let cancelled = false;
 
     const sync = async () => {

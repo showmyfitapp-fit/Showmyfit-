@@ -128,7 +128,7 @@ export async function sendMsg91OrderAlert(params: {
   orderNumber?: string;
   link?: string;
 }): Promise<void> {
-  if (!params.phone) return;
+  if (!params.phone || !process.env.MSG91_AUTH_KEY) return;
   const tasks: Promise<void>[] = [sendMsg91Sms(params.phone, params.message)];
   if (process.env.MSG91_WHATSAPP_NUMBER) {
     tasks.push(

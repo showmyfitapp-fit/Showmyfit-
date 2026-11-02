@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { absoluteUrl } from '@/config/site';
 import type { OrderAlertEvent } from '@/lib/orders/alerts';
+import { sendMsg91OrderAlert } from '@/lib/msg91/alerts';
 import { mapOrderRow } from '@/lib/orders/store';
 import { listOnlinePartnerRows } from '@/lib/server/delivery-partners';
 import { findByIdOrAuthUserId, getRequestUser, isAdminEmail } from '@/lib/server/request-user';
@@ -169,7 +170,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.event === 'new_order' || body.event === 'pickup_ready') {
-      const partners = await listOnlinePartnerRows();
+      const partners = await listOnlinePartnerRows({
+        includeOffline: body.event === 'new_order',
+      });
       partners.forEach((partner) => {
         recipients.push({
           userIds: partnerUserIds(partner),
@@ -223,6 +226,13 @@ export async function POST(request: NextRequest) {
           orderId: order.id!,
           orderNumber: order.orderNumber,
           items: order.items,
+        });
+        // SMS / WhatsApp so seller and riders get the alert with the app closed.
+        await sendMsg91OrderAlert({
+          phone: recipient.phone,
+          message,
+          orderNumber: order.orderNumber,
+          link,
         });
       })
     );

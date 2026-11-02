@@ -25,6 +25,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
+import { apiRequest } from '@/lib/api/browser';
 
 interface Order {
   id: string;
@@ -148,9 +149,19 @@ const OrderManagementPage: React.FC = () => {
 
   // Filter orders
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customerEmail.toLowerCase().includes(searchTerm.toLowerCase());
+    const haystack = [
+      order.orderNumber,
+      order.customerName,
+      order.customerEmail,
+      order.customerPhone,
+      order.paymentMethod,
+      (order as any).paymentId,
+      (order as any).razorpayOrderId,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    const matchesSearch = haystack.includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
     const matchesPaymentStatus = filterPaymentStatus === 'all' || order.paymentStatus === filterPaymentStatus;
     return matchesSearch && matchesStatus && matchesPaymentStatus;
@@ -421,6 +432,27 @@ const OrderManagementPage: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700">Payment Method</label>
                           <p className="text-gray-900">{selectedOrder.paymentMethod}</p>
                         </div>
+                        {selectedOrder.paymentStatus === 'paid' && (
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await apiRequest(`/api/orders/${selectedOrder.id}/refund`, {
+                                  method: 'POST',
+                                  body: JSON.stringify({ reason: 'admin_refund' }),
+                                });
+                                setMessage(`Refund started for ${selectedOrder.orderNumber}`);
+                                setIsSuccess(true);
+                                await loadOrders();
+                              } catch (error) {
+                                setMessage(error instanceof Error ? error.message : 'Refund failed');
+                                setIsSuccess(false);
+                              }
+                            }}
+                          >
+                            Refund
+                          </Button>
+                        )}
                         {selectedOrder.trackingNumber && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700">Tracking Number</label>

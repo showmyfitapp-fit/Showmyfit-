@@ -16,6 +16,7 @@ export function mapPartner(row: Record<string, any>): DeliveryPartner {
     phone: row.phone ? String(row.phone) : undefined,
     isOnline: Boolean(row.is_online),
     lastOnlineAt: toDate(row.last_online_at),
+    availabilityStatus: (row.availability_status || (row.is_online ? 'online' : 'offline')) as DeliveryPartner['availabilityStatus'],
   };
 }
 
@@ -99,7 +100,7 @@ export async function upsertDeliveryPartner(params: {
   if (error) throw error;
 }
 
-export async function listOnlinePartnerRows() {
+export async function listOnlinePartnerRows(options?: { includeOffline?: boolean }) {
   const query = await getSupabaseAdminClient()
     .from('delivery_partners')
     .select('id, auth_user_id, phone, is_online');
@@ -107,5 +108,6 @@ export async function listOnlinePartnerRows() {
     if (!query.error.message.includes('is_online')) throw query.error;
     return [];
   }
+  if (options?.includeOffline) return query.data || [];
   return (query.data || []).filter((row) => row.is_online === true);
 }

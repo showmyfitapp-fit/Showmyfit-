@@ -139,6 +139,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addProductStep, setAddProductStep] = useState(1);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [message, setMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
@@ -210,6 +211,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
     };
 
     if (showAddProduct) {
+      setAddProductStep(1);
       document.addEventListener('mousedown', handleOverlayClick);
     }
 
@@ -817,6 +819,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
       updatedAt: new Date()
     });
     setCategorySpecificData({});
+    setAddProductStep(1);
   };
 
   // Tags feature removed per request
@@ -845,6 +848,31 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
 
     return hasName && hasBrand && hasPrice && hasOriginalPrice && hasCategory && hasSubcategory && hasStock && hasImage && hasSizes;
   };
+
+  const isAddProductStepValid = (step: number): boolean => {
+    const categoryFields = getCategorySpecificFields(
+      formData.category,
+      categorySpecificData,
+      formData.subcategoryName
+    );
+    const hasSizesField = 'sizes' in categoryFields && categoryFields.sizes?.type === 'multi-select';
+    const hasSizes = hasSizesField
+      ? (categorySpecificData.sizes && Array.isArray(categorySpecificData.sizes) && categorySpecificData.sizes.length > 0)
+      : true;
+
+    if (step === 1) {
+      return formData.name.trim() !== '' && formData.brand.trim() !== '' && formData.category !== '' && formData.subcategory !== '';
+    }
+    if (step === 2) return formData.image.trim() !== '';
+    if (step === 3) return formData.stock >= 1 && hasSizes;
+    if (step === 4) return formData.price > 0 && (formData.originalPrice ?? 0) > 0;
+    return isFormValid();
+  };
+
+  const productDiscountPercent =
+    formData.originalPrice && formData.price && formData.originalPrice > formData.price
+      ? Math.round(((formData.originalPrice - formData.price) / formData.originalPrice) * 100)
+      : 0;
 
   // Edit existing product: prefill the form and open modal
   const handleEditProduct = (product: Product) => {
@@ -2107,12 +2135,15 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
               {/* Add/Edit Product Form Overlay */}
               {showAddProduct && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-8 pb-16 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+                  <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-8 pb-16 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                     <div className="mb-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-2xl font-bold text-gray-900">
-                          {editingProduct ? 'Edit Product' : 'Add New Product'}
-                        </h2>
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">
+                            {editingProduct ? 'Edit Product' : 'Add Product in 5 Simple Steps'}
+                          </h2>
+                          <p className="text-sm text-gray-500 mt-1">List your product in under 2 minutes</p>
+                        </div>
                         <button
                           onClick={() => {
                             setShowAddProduct(false);
@@ -2126,24 +2157,55 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                           <XCircle className="w-6 h-6" />
                         </button>
                       </div>
-                      <div className="space-y-4">
-                        {/* Cancel Button - Full Width on Mobile */}
-                        <Button
-                          onClick={() => {
-                            setShowAddProduct(false);
-                            setEditingProduct(null);
-                            resetForm();
-                          }}
-                          variant="outline"
-                          className="w-full sm:w-auto"
-                        >
-                          <XCircle className="w-4 h-4 mr-2" />
-                          Cancel
-                        </Button>
+                      <div className="grid grid-cols-5 gap-2 mt-4">
+                        {[
+                          { n: 1, title: 'Basic Details', desc: 'Product information' },
+                          { n: 2, title: 'Upload Images', desc: 'Clear photos' },
+                          { n: 3, title: 'Variations', desc: 'Size, color, quantity' },
+                          { n: 4, title: 'Pricing', desc: 'Selling price' },
+                          { n: 5, title: 'Review & Publish', desc: 'Check and go live' },
+                        ].map((step) => (
+                          <button
+                            key={step.n}
+                            type="button"
+                            onClick={() => {
+                              const canOpen =
+                                step.n <= addProductStep ||
+                                (step.n === addProductStep + 1 && isAddProductStepValid(addProductStep));
+                              if (canOpen) setAddProductStep(step.n);
+                            }}
+                            className={`text-left p-2 rounded-xl border transition-colors ${
+                              addProductStep === step.n
+                                ? 'border-pink-400 bg-pink-50'
+                                : addProductStep > step.n
+                                  ? 'border-pink-200 bg-white'
+                                  : 'border-gray-200 bg-gray-50'
+                            }`}
+                          >
+                            <div className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mb-1 ${
+                              addProductStep >= step.n ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              {step.n}
+                            </div>
+                            <p className="text-[11px] sm:text-xs font-semibold text-gray-900 leading-tight">{step.title}</p>
+                            <p className="hidden sm:block text-[10px] text-gray-500 leading-tight">{step.desc}</p>
+                          </button>
+                        ))}
                       </div>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6 pb-8">
+                    <form
+                      onSubmit={(e) => {
+                        if (addProductStep < 5) {
+                          e.preventDefault();
+                          if (isAddProductStepValid(addProductStep)) setAddProductStep((s) => s + 1);
+                          return;
+                        }
+                        handleSubmit(e);
+                      }}
+                      className="space-y-6 pb-8"
+                    >
+                      {addProductStep === 1 && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2153,10 +2215,10 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="Enter product name"
-                            required
                           />
+                          <p className="text-xs text-gray-400 mt-1 text-right">{formData.name.length}/100</p>
                         </div>
 
                         <div>
@@ -2167,50 +2229,9 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             type="text"
                             value={formData.brand}
                             onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             placeholder="Enter brand name"
-                            required
                           />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Selling Price (₹) *
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={formData.price || ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value));
-                              setFormData({ ...formData, price: value });
-                            }}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                            placeholder="Enter selling price"
-                            required
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Enter selling price in rupees</p>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Original Price (MRP) (₹) *
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={formData.originalPrice || ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value));
-                              setFormData({ ...formData, originalPrice: value });
-                            }}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                            placeholder="Enter original price / MRP"
-                            required
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Enter MRP for discount calculation</p>
                         </div>
 
                         <div className="md:col-span-2">
@@ -2224,7 +2245,10 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                 subcategory: '',
                                 subcategoryName: '',
                               }));
-                              setCategorySpecificData({});
+                              setCategorySpecificData((prev) => ({
+                                material: prev.material,
+                                gst: prev.gst,
+                              }));
                             }}
                             onSubcategoryChange={(subcategorySlug, subcategoryName) => {
                               setFormData((prev) => ({
@@ -2237,44 +2261,36 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2.5">
-                            Stock Quantity <span className="text-red-500">*</span>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Material (optional)
                           </label>
                           <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={formData.stock || ''}
-                            onChange={(e) => {
-                              const inputValue = e.target.value;
-                              // Allow empty input while typing
-                              if (inputValue === '') {
-                                setFormData({ ...formData, stock: 0 });
-                                return;
-                              }
-                              const value = parseInt(inputValue);
-                              // Only update if it's a valid number, allow typing freely
-                              if (!isNaN(value)) {
-                                setFormData({ ...formData, stock: value < 1 ? 1 : value });
-                              }
-                            }}
-                            onBlur={(e) => {
-                              // Validate on blur - ensure minimum is 1
-                              const value = parseInt(e.target.value) || 0;
-                              if (value < 1) {
-                                setFormData({ ...formData, stock: 1 });
-                              }
-                            }}
-                            className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 hover:border-gray-400 shadow-sm hover:shadow-md"
-                            placeholder="Enter stock quantity (minimum 1)"
-                            required
+                            type="text"
+                            value={categorySpecificData.material || ''}
+                            onChange={(e) => setCategorySpecificData({ ...categorySpecificData, material: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="e.g., 100% Cotton"
                           />
-                          <p className="text-xs text-gray-500 mt-2 flex items-center">
-                            <span className="mr-1">⚠️</span>
-                            Minimum stock quantity is 1. Products cannot have 0 stock.
-                          </p>
                         </div>
 
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Short Description
+                          </label>
+                          <textarea
+                            value={formData.description}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            rows={4}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="Comfortable fit, fabric, and who it is for"
+                          />
+                          <p className="text-xs text-gray-400 mt-1 text-right">{(formData.description || '').length}/500</p>
+                        </div>
+                      </div>
+                      )}
+
+                      {addProductStep === 2 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Main Image *
@@ -2292,7 +2308,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             maxSize={10}
                             className="w-full"
                           />
-                          <p className="text-xs text-gray-500 mt-1">Upload the primary product image (max 10MB)</p>
+                          <p className="text-xs text-gray-500 mt-1">Drag & drop or click to upload the primary product image (max 10MB)</p>
                         </div>
 
                         <div>
@@ -2303,7 +2319,9 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             {(formData.images || []).map((image, index) => (
                               <div key={index} className="relative">
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-sm text-gray-600">Image {index + 1}</span>
+                                  <span className="text-sm text-gray-600">
+                                    {index === 0 ? 'Close-up' : index === 1 ? 'Tag / Label' : `Image ${index + 1}`}
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -2333,46 +2351,63 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                 />
                               </div>
                             ))}
-                            {(formData.images || []).length < 5 && (
+                            {(formData.images || []).length < 10 && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   setFormData({ ...formData, images: [...(formData.images || []), ''] });
                                 }}
-                                className="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-green-500 hover:text-green-600 transition-colors duration-200 flex flex-col items-center justify-center"
+                                className="w-full px-4 py-6 border-2 border-dashed border-pink-200 rounded-lg text-gray-600 hover:border-pink-500 hover:text-pink-600 transition-colors duration-200 flex flex-col items-center justify-center"
                               >
                                 <Plus className="w-6 h-6 mb-2" />
-                                <span>Add Additional Image</span>
+                                <span>Add More Images</span>
                               </button>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">Add up to 5 additional product images (max 10MB each)</p>
-                        </div>
-
-                        <div>
-                          <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
-                            Status
-                          </label>
-                          <SelectDropdown
-                            id="status"
-                            value={formData.status}
-                            onChange={(value) =>
-                              setFormData({ ...formData, status: value as 'active' | 'inactive' | 'draft' })
-                            }
-                            placeholder="Select Status"
-                            options={statusOptions.map((status) => ({
-                              value: status.value,
-                              label: (
-                                <span className="flex items-center space-x-2">
-                                  <span className="text-lg">{status.icon}</span>
-                                  <span className={`font-medium ${status.color}`}>{status.label}</span>
-                                </span>
-                              ),
-                            }))}
-                            buttonClassName="focus:ring-green-500"
-                          />
+                          <p className="text-xs text-gray-500 mt-1">Add up to 10 additional product images (max 10MB each)</p>
                         </div>
                       </div>
+                      )}
+
+                      {addProductStep === 3 && (
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2.5">
+                            Stock Quantity <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={formData.stock || ''}
+                            onChange={(e) => {
+                              const inputValue = e.target.value;
+                              // Allow empty input while typing
+                              if (inputValue === '') {
+                                setFormData({ ...formData, stock: 0 });
+                                return;
+                              }
+                              const value = parseInt(inputValue);
+                              // Only update if it's a valid number, allow typing freely
+                              if (!isNaN(value)) {
+                                setFormData({ ...formData, stock: value < 1 ? 1 : value });
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Validate on blur - ensure minimum is 1
+                              const value = parseInt(e.target.value) || 0;
+                              if (value < 1) {
+                                setFormData({ ...formData, stock: 1 });
+                              }
+                            }}
+                            className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-200 hover:border-gray-400 shadow-sm hover:shadow-md"
+                            placeholder="Enter stock quantity (minimum 1)"
+                          />
+                          <p className="text-xs text-gray-500 mt-2 flex items-center">
+                            <span className="mr-1">⚠️</span>
+                            Minimum stock quantity is 1. Products cannot have 0 stock.
+                          </p>
+                        </div>
 
                       {/* Category-Specific Fields */}
                       {Object.keys(getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName)).length > 0 && (
@@ -2383,7 +2418,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                             {topLevelCategories.find((c) => c.slug === formData.category)?.name} Specific Details
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries(getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName)).map(([key, field]) => {
+                            {Object.entries(getCategorySpecificFields(formData.category, categorySpecificData, formData.subcategoryName)).filter(([key]) => key !== 'material').map(([key, field]) => {
                               const currentField = field;
                               return (
                                 <div key={key} className={currentField.type === 'multi-text' ? 'md:col-span-2' : ''}>
@@ -2516,19 +2551,141 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                           </div>
                         </div>
                       )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Description
-                        </label>
-                        <textarea
-                          value={formData.description}
-                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                          rows={4}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                          placeholder="Enter product description (optional)"
-                        />
                       </div>
+                      )}
+
+                      {addProductStep === 4 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Original Price (MRP) (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.originalPrice || ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value));
+                              setFormData({ ...formData, originalPrice: value });
+                            }}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="Enter original price / MRP"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Enter MRP for discount calculation</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Selling Price (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.price || ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value));
+                              setFormData({ ...formData, price: value });
+                            }}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                            placeholder="Enter selling price"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Enter selling price in rupees</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Discount</label>
+                          <div className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-800 font-semibold">
+                            {productDiscountPercent > 0 ? `${productDiscountPercent}% OFF` : 'No discount'}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            GST (optional)
+                          </label>
+                          <SelectDropdown
+                            id="gst"
+                            value={categorySpecificData.gst || ''}
+                            onChange={(value) => setCategorySpecificData({ ...categorySpecificData, gst: value })}
+                            placeholder="Select GST"
+                            options={[
+                              { value: '', label: 'None' },
+                              { value: '0%', label: '0%' },
+                              { value: '5% (Apparel)', label: '5% (Apparel)' },
+                              { value: '12%', label: '12%' },
+                              { value: '18%', label: '18%' },
+                            ]}
+                            buttonClassName="focus:ring-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
+                            Status
+                          </label>
+                          <SelectDropdown
+                            id="status"
+                            value={formData.status}
+                            onChange={(value) =>
+                              setFormData({ ...formData, status: value as 'active' | 'inactive' | 'draft' })
+                            }
+                            placeholder="Select Status"
+                            options={statusOptions.map((status) => ({
+                              value: status.value,
+                              label: (
+                                <span className="flex items-center space-x-2">
+                                  <span className="text-lg">{status.icon}</span>
+                                  <span className={`font-medium ${status.color}`}>{status.label}</span>
+                                </span>
+                              ),
+                            }))}
+                            buttonClassName="focus:ring-pink-500"
+                          />
+                        </div>
+                      </div>
+                      )}
+
+                      {addProductStep === 5 && (
+                      <div className="space-y-6">
+                        <div className="border border-gray-200 rounded-2xl p-6 bg-gray-50">
+                          <p className="text-sm font-semibold text-gray-500 mb-4">Product Preview</p>
+                          <div className="flex flex-col sm:flex-row gap-6">
+                            {formData.image ? (
+                              <img src={formData.image} alt={formData.name || 'Product preview'} className="w-40 h-40 object-contain bg-white rounded-xl border" />
+                            ) : (
+                              <div className="w-40 h-40 bg-white rounded-xl border flex items-center justify-center text-gray-400 text-sm">No image</div>
+                            )}
+                            <div className="flex-1">
+                              <h3 className="text-xl font-bold text-gray-900">{formData.name || 'Untitled product'}</h3>
+                              <p className="text-sm text-gray-500 mt-1">{formData.brand}</p>
+                              <p className="text-lg font-semibold text-gray-900 mt-3">
+                                ₹{formData.price || 0}
+                                {formData.originalPrice ? (
+                                  <span className="ml-2 text-sm text-gray-400 line-through">₹{formData.originalPrice}</span>
+                                ) : null}
+                                {productDiscountPercent > 0 && (
+                                  <span className="ml-2 text-sm text-green-600 font-semibold">{productDiscountPercent}% OFF</span>
+                                )}
+                              </p>
+                              <p className="text-sm text-gray-600 mt-3">{formData.description || 'No description added.'}</p>
+                              {categorySpecificData.colors && (
+                                <p className="text-xs text-gray-500 mt-2">Colors: {categorySpecificData.colors}</p>
+                              )}
+                              {Array.isArray(categorySpecificData.sizes) && categorySpecificData.sizes.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-1">Sizes: {categorySpecificData.sizes.join(', ')}</p>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAddProductStep(1)}
+                            className="mt-4 text-sm font-semibold text-pink-600 hover:text-pink-700"
+                          >
+                            Edit details
+                          </button>
+                        </div>
 
                       {/* Tags and Featured Product removed per request */}
 
@@ -2557,28 +2714,46 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                           </ul>
                         </div>
                       )}
+                      </div>
+                      )}
 
-                      <div className="flex justify-end space-x-4 pt-6 pb-8 border-t border-gray-200">
+                      <div className="flex justify-between space-x-4 pt-6 pb-8 border-t border-gray-200">
                         <Button
                           type="button"
                           onClick={() => {
+                            if (addProductStep > 1) {
+                              setAddProductStep((s) => s - 1);
+                              return;
+                            }
                             setShowAddProduct(false);
                             setEditingProduct(null);
                             resetForm();
                           }}
                           variant="outline"
                         >
-                          Cancel
+                          {addProductStep > 1 ? 'Back' : 'Cancel'}
                         </Button>
-                        <Button
-                          type="submit"
-                          variant="primary"
-                          className={`${!isFormValid() ? 'bg-gray-400 cursor-not-allowed hover:bg-gray-400 opacity-60' : 'bg-green-600 hover:bg-green-700'}`}
-                          disabled={!isFormValid()}
-                        >
-                          <Save className="w-4 h-4 mr-2" />
-                          {editingProduct ? 'Update Product' : 'Add Product'}
-                        </Button>
+                        {addProductStep < 5 ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            className={`${!isAddProductStepValid(addProductStep) ? 'bg-gray-400 cursor-not-allowed hover:bg-gray-400 opacity-60' : 'bg-pink-500 hover:bg-pink-600'}`}
+                            disabled={!isAddProductStepValid(addProductStep)}
+                            onClick={() => setAddProductStep((s) => s + 1)}
+                          >
+                            Next
+                          </Button>
+                        ) : (
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            className={`${!isFormValid() ? 'bg-gray-400 cursor-not-allowed hover:bg-gray-400 opacity-60' : 'bg-pink-500 hover:bg-pink-600'}`}
+                            disabled={!isFormValid()}
+                          >
+                            <Save className="w-4 h-4 mr-2" />
+                            {editingProduct ? 'Update Product' : 'Publish Product'}
+                          </Button>
+                        )}
                       </div>
                     </form>
                   </div>

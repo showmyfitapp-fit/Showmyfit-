@@ -14,36 +14,45 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-    title: 'ShowMyFIT - Nearby Store | Shop from Nearby Stores Online',
-    description: 'Discover and shop from amazing nearby stores in your area. ShowMyFIT connects you with nearby businesses offering fashion, electronics, home goods, and more. Support your community while finding great deals!',
-    keywords: 'nearby store, online shopping, nearby stores, community shopping, fashion, electronics, home goods, local business, ShowMyFIT, store finder',
-    authors: [{ name: 'ShowMyFIT' }],
-    robots: 'index, follow',
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://showmyfit.com'),
+    title: {
+        default: 'ShowMyFit | Shop fashion from nearby stores',
+        template: '%s | ShowMyFit',
+    },
+    description: 'ShowMyFit is a quick-commerce fashion marketplace. Find in-stock clothes from nearby stores, add to cart, and get local delivery.',
+    keywords: 'ShowMyFit, ShowMyFIT, Showmyfit, nearby store, local fashion, quick commerce, shop nearby stores, clothes delivery India',
+    authors: [{ name: 'ShowMyFit' }],
+    robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+    verification: {
+        google:
+            process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
+            'pUY5GLg_TuI9mL85fSDPsuk3Fm-s9QxKEDyirrWtMWQ',
+    },
     alternates: {
-        canonical: 'https://showmyfit.com/',
+        canonical: '/',
     },
     openGraph: {
         type: 'website',
         url: 'https://showmyfit.com/',
-        title: 'ShowMyFIT - Nearby Store | Shop from Nearby Stores Online',
-        description: 'Discover and shop from amazing nearby stores in your area. ShowMyFIT connects you with nearby businesses offering fashion, electronics, home goods, and more.',
+        title: 'ShowMyFit | Shop fashion from nearby stores',
+        description: 'Find in-stock fashion from nearby stores and get local delivery on ShowMyFit.',
         images: [
             {
-                url: 'https://showmyfit.com/og-image.jpg',
+                url: '/logo.jpg',
                 width: 1200,
                 height: 630,
             }
         ],
-        siteName: 'ShowMyFIT',
-        locale: 'en_US',
+        siteName: 'ShowMyFit',
+        locale: 'en_IN',
     },
     twitter: {
         card: 'summary_large_image',
         site: '@showmyfit',
         creator: '@showmyfit',
-        title: 'ShowMyFIT - Nearby Store | Shop from Nearby Stores Online',
-        description: 'Discover and shop from amazing nearby stores in your area. ShowMyFIT connects you with nearby businesses offering fashion, electronics, home goods, and more.',
-        images: ['https://showmyfit.com/twitter-image.jpg'],
+        title: 'ShowMyFit | Shop fashion from nearby stores',
+        description: 'Find in-stock fashion from nearby stores and get local delivery on ShowMyFit.',
+        images: ['/logo.jpg'],
     },
 };
 
@@ -70,10 +79,11 @@ export default function RootLayout({
                         __html: JSON.stringify({
                             "@context": "https://schema.org",
                             "@type": "Organization",
-                            "name": "ShowMyFIT",
-                            "description": "Nearby store platform connecting customers with amazing nearby stores",
+                            "name": "ShowMyFit",
+                            "alternateName": ["ShowMyFIT", "Showmyfit"],
+                            "description": "Quick-commerce fashion marketplace for nearby stores",
                             "url": "https://showmyfit.com",
-                            "logo": "https://showmyfit.com/logo.png",
+                            "logo": "https://showmyfit.com/logo.jpg",
                             "contactPoint": {
                                 "@type": "ContactPoint",
                                 "email": "showmyfitapp@gmail.com",
@@ -82,20 +92,26 @@ export default function RootLayout({
                         })
                     }}
                 />
+                <Script
+                    id="ld-json-website"
+                    type="application/ld+json"
+                    strategy="afterInteractive"
+                    dangerouslySetInnerHTML={{
+                        __html: JSON.stringify({
+                            "@context": "https://schema.org",
+                            "@type": "WebSite",
+                            "name": "ShowMyFit",
+                            "url": "https://showmyfit.com",
+                            "potentialAction": {
+                                "@type": "SearchAction",
+                                "target": "https://showmyfit.com/search?q={search_term_string}",
+                                "query-input": "required name=search_term_string"
+                            }
+                        })
+                    }}
+                />
             </head>
             <body className={inter.className} suppressHydrationWarning>
-                <Script
-                    src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"
-                    strategy="afterInteractive"
-                />
-                <Script id="google-analytics" strategy="afterInteractive">
-                    {`
-                        window.dataLayer = window.dataLayer || [];
-                        function gtag(){dataLayer.push(arguments);}
-                        gtag('js', new Date());
-                        gtag('config', 'G-XXXXXXXXXX');
-                    `}
-                </Script>
                 <Script
                     src="https://checkout.razorpay.com/v1/checkout.js"
                     strategy="afterInteractive"

@@ -15,8 +15,16 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
-import { fetchCustomerOrders, ORDER_STATUS_LABELS, type OrderRecord } from '@/lib/orders';
+import {
+  cancelOrder,
+  CANCELLABLE_ORDER_STATUSES,
+  fetchCustomerOrders,
+  ORDER_STATUS_LABELS,
+  type OrderRecord,
+} from '@/lib/orders';
 import { subscribeTable } from '@/lib/realtime/subscribe';
+import ReturnChatbot from '@/components/orders/ReturnChatbot';
+import { apiRequest } from '@/lib/api/browser';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -40,6 +48,21 @@ const CustomerOrdersPage: React.FC = () => {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+  const [returnOrder, setReturnOrder] = useState<OrderRecord | null>(null);
+
+  const handleCancel = async (order: OrderRecord) => {
+    if (!order.id) return;
+    if (!window.confirm(`Cancel order ${order.orderNumber}?`)) return;
+    try {
+      await cancelOrder(order.id);
+      setMessage(`Order ${order.orderNumber} cancelled`);
+      const next = await fetchCustomerOrders(currentUser?.uid);
+      setOrders(next);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not cancel this order');
+    }
+  };
 
   useEffect(() => {
     if (!currentUser) return;
@@ -79,6 +102,11 @@ const CustomerOrdersPage: React.FC = () => {
         </Link>
         <h1 className="text-3xl font-black text-gray-900 mb-2">My Orders</h1>
         <p className="text-gray-600 mb-8">Track distance, ETA, pickup code, and delivery status.</p>
+        {message && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-sm">
+            {message}
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center py-16 text-gray-500">Loading orders...</div>
@@ -128,6 +156,17 @@ const CustomerOrdersPage: React.FC = () => {
                       </p>
                     )}
                     <p className="font-bold text-gray-900 text-base">₹{order.total.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500">
+                      {[
+                        order.placedAt && `Placed ${order.placedAt.toLocaleString()}`,
+                        order.acceptedAt && `Accepted`,
+                        order.packedAt && `Packed`,
+                        order.outForDeliveryAt && `Out for delivery`,
+                        order.deliveredAt && `Delivered`,
+                      ]
+                        .filter(Boolean)
+                        .join(' → ')}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -175,10 +214,84 @@ const CustomerOrdersPage: React.FC = () => {
                       On the way — check WhatsApp for OTP
                     </p>
                   )}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {order.id &&
+                      CANCELLABLE_ORDER_STATUSES.includes(order.status) &&
+                      !order.pickupVerified && (
+                        <Button variant="secondary" onClick={() => handleCancel(order)}>
+                          Cancel order
+                        </Button>
+                      )}
+                    {order.status === 'delivered' && (
+                      <Button variant="outline" onClick={() => setReturnOrder(order)}>
+                        Return item
+                      </Button>
+                    )}
+                    {order.status === 'delivered' && (
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const { ticket } = await apiRequest<{ ticket: { id: string } }>(
+                              '/api/support/tickets',
+                              {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  orderId: order.id,
+                                  category: 'not_received',
+                                  message: `Customer reported order ${order.orderNumber} as not received`,
+                                }),
+                              }
+                            );
+                            setMessage(`Support ticket ${ticket.id} opened`);
+                          } catch (error) {
+                            setMessage(error instanceof Error ? error.message : 'Could not open support');
+                          }
+                        }}
+                      >
+                        Not received
+                      </Button>
+                    )}
+                    {order.id && (
+                      <Link href={`/orders/${order.id}/receipt`} className="text-sm font-bold text-purple-700 self-center">
+                        Receipt
+                      </Link>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const { ticket } = await apiRequest<{ ticket: { id: string } }>(
+                            '/api/support/tickets',
+                            {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                orderId: order.id,
+                                category: 'order_help',
+                                message: `Help requested for ${order.orderNumber}`,
+                              }),
+                            }
+                          );
+                          setMessage(`Support ticket ${ticket.id} opened`);
+                        } catch (error) {
+                          setMessage(error instanceof Error ? error.message : 'Could not open support');
+                        }
+                      }}
+                    >
+                      Get help
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+        )}
+        {returnOrder && (
+          <ReturnChatbot
+            order={returnOrder}
+            onClose={() => setReturnOrder(null)}
+            onSubmitted={setMessage}
+          />
         )}
       </div>
     </div>

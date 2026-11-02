@@ -8,6 +8,7 @@ import {
 } from './helpers';
 import { requestOrderAlert } from './alerts';
 import { createOrder } from './store';
+import type { PaymentStatus } from './types';
 
 export async function fetchSellerShopInfo(sellerId: string): Promise<SellerShopInfo> {
   const { seller } = await apiRequest<{ seller: SellerShopInfo }>(
@@ -24,8 +25,11 @@ export async function createOrdersFromCart(params: {
   customerPhone: string;
   customerAddress?: string;
   customerLocation?: { lat: number; lng: number } | null;
-  paymentId: string;
-  razorpayOrderId: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  paymentMethod?: string;
+  paymentStatus?: PaymentStatus;
+  couponCode?: string;
 }) {
   const rawLocation =
     params.customerLocation ||
@@ -53,6 +57,9 @@ export async function createOrdersFromCart(params: {
       customerLocation,
       paymentId: params.paymentId,
       razorpayOrderId: params.razorpayOrderId,
+      paymentMethod: params.paymentMethod,
+      paymentStatus: params.paymentStatus,
+      couponCode: params.couponCode,
     });
 
     const orderId = await createOrder(draft);

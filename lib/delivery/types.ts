@@ -38,4 +38,5 @@ export interface DeliveryPartner {
   phone?: string;
   isOnline: boolean;
   lastOnlineAt?: Date | null;
+  availabilityStatus?: 'online' | 'offline' | 'busy' | 'paused' | 'suspended';
 }

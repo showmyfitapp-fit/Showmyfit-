@@ -1,7 +1,13 @@
+export function registerOrderAlertWorker() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+  void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+}
+
 export async function requestBrowserNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'denied';
   }
+  registerOrderAlertWorker();
   if (Notification.permission !== 'default') {
     return Notification.permission;
   }
@@ -24,18 +30,34 @@ export function showSystemNotification(params: {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
 
-  const notice = new Notification(params.title, {
+  const options: NotificationOptions = {
     body: params.body,
     tag: params.tag || params.title,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-  });
-
-  notice.onclick = () => {
-    window.focus();
-    if (params.url) window.location.href = params.url;
-    notice.close();
+    icon: '/logo.jpg',
+    badge: '/logo.jpg',
+    data: { url: params.url || '/' },
   };
+
+  const openNotice = () => {
+    const notice = new Notification(params.title, options);
+    notice.onclick = () => {
+      window.focus();
+      if (params.url) window.location.href = params.url;
+      notice.close();
+    };
+  };
+
+  if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.getRegistration().then((registration) => {
+      if (registration) {
+        return registration.showNotification(params.title, options);
+      }
+      openNotice();
+    }).catch(openNotice);
+    return;
+  }
+
+  openNotice();
 }
 
 export function notificationTargetUrl(type?: string, orderId?: string): string {

@@ -9,6 +9,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchSellerOrders } from '@/lib/orders';
 import { getProductsBySeller } from '@/lib/supabase/admin';
+import { sellerPayout } from '@/lib/ops/rules';
 
 interface Product {
   id: string;
@@ -603,6 +604,14 @@ const SellerDashboard: React.FC = () => {
             icon={DollarSign}
             color="bg-green-500"
             growth={stats.revenueGrowth}
+            trend="up"
+          />
+          <StatCard
+            title="Net payout (after 10%)"
+            value={`₹${sellerPayout(stats.totalRevenue).net.toLocaleString()}`}
+            icon={DollarSign}
+            color="bg-emerald-600"
+            growth={0}
             trend="up"
           />
           <StatCard

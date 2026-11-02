@@ -4,7 +4,8 @@ export type OrderStatus =
   | 'packed'
   | 'out_for_delivery'
   | 'delivered'
-  | 'cancelled';
+  | 'cancelled'
+  | 'failed_delivery';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 
@@ -58,6 +59,13 @@ export interface OrderRecord {
   paymentMethod: string;
   paymentId?: string;
   razorpayOrderId?: string;
+  paymentAttemptId?: string;
+  refundId?: string;
+  refundAmount?: number;
+  codCollected?: boolean;
+  cancelReason?: string;
+  tax?: number;
+  fees?: number;
 
   subtotal: number;
   discount: number;
@@ -86,6 +94,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
+  failed_delivery: 'Delivery Failed',
 };
 
 export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [

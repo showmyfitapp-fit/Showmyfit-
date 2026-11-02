@@ -194,6 +194,30 @@ const AdminDashboard: React.FC = () => {
       stats: stats.totalOrders
     },
     {
+      title: 'Payments',
+      description: 'Online, COD collection, and refunds',
+      icon: DollarSign,
+      link: '/admin/payments',
+      color: 'bg-emerald-500',
+      stats: null
+    },
+    {
+      title: 'Cancellations',
+      description: 'Cancelled order queue',
+      icon: AlertCircle,
+      link: '/admin/cancellations',
+      color: 'bg-red-500',
+      stats: null
+    },
+    {
+      title: 'Returns',
+      description: 'Return requests and review',
+      icon: Package,
+      link: '/admin/returns',
+      color: 'bg-amber-500',
+      stats: null
+    },
+    {
       title: 'System Settings',
       description: 'Configure platform settings',
       icon: Settings,
