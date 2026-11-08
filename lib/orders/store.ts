@@ -1,7 +1,12 @@
 import { apiRequest } from '@/lib/api/browser';
 import { generateDeliveryOtp } from './helpers';
 import { requestOrderAlert } from './alerts';
-import { CANCELLABLE_ORDER_STATUSES, type OrderRecord, type OrderStatus } from './types';
+import {
+  normalizeOrderStatus,
+  SELLER_CANCELLABLE_STATUSES,
+  type OrderRecord,
+  type OrderStatus,
+} from './types';
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -31,7 +36,7 @@ export function mapOrderRow(row: Record<string, any>): OrderRecord {
     storeAddress: row.store_address ? String(row.store_address) : undefined,
     storePhone: row.store_phone ? String(row.store_phone) : undefined,
     items: Array.isArray(row.items) ? row.items : [],
-    status: (row.status || 'placed') as OrderStatus,
+    status: normalizeOrderStatus(row.status),
     paymentStatus: row.payment_status || 'paid',
     paymentMethod: String(row.payment_method || 'razorpay'),
     paymentId: row.payment_id ? String(row.payment_id) : undefined,
@@ -89,9 +94,12 @@ function toOrderInsert(order: Omit<OrderRecord, 'id'>) {
     payment_method: order.paymentMethod,
     payment_id: order.paymentId || null,
     razorpay_order_id: order.razorpayOrderId || null,
+    payment_attempt_id: order.paymentAttemptId || null,
     subtotal: order.subtotal,
     discount: order.discount,
     shipping: order.shipping,
+    tax: order.tax || 0,
+    fees: order.fees || 0,
     total: order.total,
     distance_km: order.distanceKm ?? null,
     eta_minutes: order.etaMinutes ?? null,
@@ -161,7 +169,7 @@ export async function updateOrderStatus(
   const now = new Date().toISOString();
   const timestamps: Record<string, unknown> = {};
   if (status === 'accepted') timestamps.accepted_at = now;
-  if (status === 'packed') timestamps.packed_at = now;
+  if (status === 'packed' || status === 'ready_for_pickup') timestamps.packed_at = now;
   if (status === 'out_for_delivery') timestamps.out_for_delivery_at = now;
   if (status === 'delivered') timestamps.delivered_at = now;
   if (status === 'cancelled') timestamps.cancelled_at = now;
@@ -202,8 +210,8 @@ export async function cancelOrder(orderId: string, options?: { force?: boolean }
     throw new Error('This order can no longer be cancelled');
   }
   if (!options?.force) {
-    if (!CANCELLABLE_ORDER_STATUSES.includes(order.status) || order.pickupVerified) {
-      throw new Error('Cancel is only available before the rider picks up the order');
+    if (!SELLER_CANCELLABLE_STATUSES.includes(order.status) || order.pickupVerified) {
+      throw new Error('Cancel is only available before Ready for Pickup. Ask admin/support after packing.');
     }
   }
 

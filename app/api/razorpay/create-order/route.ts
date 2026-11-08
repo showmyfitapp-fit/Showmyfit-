@@ -9,30 +9,27 @@ export async function POST(request: NextRequest) {
 
         console.log('📦 Razorpay create-order request:', { amount, currency, customReceipt });
 
-        let chargedAmount = Number(amount);
-        if (Array.isArray(items) && items.length) {
-          try {
-            const ids = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
-            if (ids.length) {
-              const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
-              const { data } = await getSupabaseAdminClient()
-                .from('products')
-                .select('id, price')
-                .in('id', ids);
-              if (data?.length) {
-                const priceById = new Map(data.map((row) => [String(row.id), Number(row.price || 0)]));
-                const catalogTotal = items.reduce((sum: number, item: { productId?: string; quantity?: number }) => {
-                  const price = priceById.get(String(item.productId || ''));
-                  if (price == null) return sum;
-                  return sum + price * Number(item.quantity || 1);
-                }, 0);
-                if (catalogTotal > 0) chargedAmount = catalogTotal;
-              }
-            }
-          } catch (error) {
-            console.warn('Catalog amount lookup skipped:', error);
-          }
+        if (!Array.isArray(items) || !items.length) {
+            return NextResponse.json(
+                { error: 'Order items are required so the amount can be calculated from catalog prices' },
+                { status: 400 }
+            );
         }
+        const ids = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
+        const { getSupabaseAdminClient } = await import('@/lib/supabase/admin-server');
+        const { data } = await getSupabaseAdminClient()
+            .from('products')
+            .select('id, price')
+            .in('id', ids);
+        const priceById = new Map((data || []).map((row) => [String(row.id), Number(row.price || 0)]));
+        if (!ids.length || ids.some((id: string) => !priceById.has(String(id)))) {
+            return NextResponse.json({ error: 'Catalog price missing for one or more items' }, { status: 400 });
+        }
+        let chargedAmount = items.reduce((sum: number, item: { productId?: string; quantity?: number }) => {
+            const price = priceById.get(String(item.productId || '')) || 0;
+            return sum + price * Number(item.quantity || 1);
+        }, 0);
+        void amount;
 
         if (coupon) {
           const { applyCoupon } = await import('@/lib/ops/rules');

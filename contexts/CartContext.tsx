@@ -71,7 +71,8 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           ...item,
           addedAt: new Date(item.addedAt)
         }));
-        setCartItems(parsedCart);
+        const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+        setCartItems(parsedCart.filter((item: CartItem) => item.addedAt.getTime() > cutoff));
       } catch (error) {
         console.error('Error loading cart from localStorage:', error);
       }

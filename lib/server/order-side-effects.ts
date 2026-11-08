@@ -53,15 +53,36 @@ export async function adjustProductStock(
     if (!item.productId || !item.quantity) continue;
     const delta = direction === 'reserve' ? -Math.abs(item.quantity) : Math.abs(item.quantity);
     try {
+      const qty = Math.abs(item.quantity);
       const { data } = await admin
         .from('products')
-        .select('id, stock')
+        .select('id, stock, stock_reserved, stock_sold')
         .eq('id', item.productId)
         .maybeSingle();
       if (!data) continue;
-      const next = Math.max(0, Number(data.stock || 0) + delta);
-      await admin.from('products').update({ stock: next }).eq('id', item.productId);
+      const current = Number(data.stock || 0);
+      if (direction === 'reserve' && current < qty) {
+        throw new Error('One or more items are out of stock');
+      }
+      const next = Math.max(0, current + delta);
+      const reserved = Math.max(0, Number(data.stock_reserved || 0) + (direction === 'reserve' ? qty : -qty));
+      const { data: updated, error } = await admin
+        .from('products')
+        .update({
+          stock: next,
+          stock_reserved: reserved,
+          stock_updated_at: new Date().toISOString(),
+        })
+        .eq('id', item.productId)
+        .gte('stock', direction === 'reserve' ? qty : 0)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (direction === 'reserve' && !updated) {
+        throw new Error('One or more items are out of stock');
+      }
     } catch (error) {
+      if (error instanceof Error && /out of stock/i.test(error.message)) throw error;
       console.warn('stock adjust skipped:', item.productId, error);
     }
   }

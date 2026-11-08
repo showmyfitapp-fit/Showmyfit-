@@ -16,7 +16,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import {
   cancelOrder,
-  CANCELLABLE_ORDER_STATUSES,
   fetchSellerOrders,
   markNotificationsRead,
   updateOrderStatus,
@@ -27,11 +26,19 @@ import {
   browserNotificationPermission,
   requestBrowserNotificationPermission,
 } from '@/lib/notifications/browser';
-import { ORDER_STATUS_LABELS, type OrderRecord, type OrderStatus } from '@/lib/orders/types';
+import {
+  ORDER_STATUS_LABELS,
+  paymentStatusLabel,
+  SELLER_CANCELLABLE_STATUSES,
+  type OrderRecord,
+  type OrderStatus,
+} from '@/lib/orders/types';
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   placed: 'accepted',
-  accepted: 'packed',
+  payment_confirmed: 'accepted',
+  accepted: 'preparing',
+  preparing: 'packed',
 };
 
 const SellerOrdersPage: React.FC = () => {
@@ -109,6 +116,18 @@ const SellerOrdersPage: React.FC = () => {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not cancel this order');
+    }
+  };
+
+  const handleReject = async (order: OrderRecord) => {
+    if (!order.id) return;
+    if (!window.confirm(`Reject order ${order.orderNumber}? Stock will be released.`)) return;
+    try {
+      await updateOrderStatus(order.id, 'rejected');
+      setMessage(`Order ${order.orderNumber} rejected`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not reject this order');
     }
   };
 
@@ -198,7 +217,7 @@ const SellerOrdersPage: React.FC = () => {
                           ? 'Cash on delivery'
                           : 'Paid online'}
                         {' · '}
-                        {order.paymentStatus}
+                        {paymentStatusLabel(order)}
                       </p>
                       {isOverdue && (
                         <p className="text-xs text-red-600 font-semibold mt-2 flex items-center justify-end gap-1">
@@ -227,7 +246,10 @@ const SellerOrdersPage: React.FC = () => {
                         <KeyRound className="w-4 h-4" />
                         Pickup code: <strong>{order.pickupCode}</strong>
                       </p>
-                      {order.pickupOtp && ['packed', 'out_for_delivery'].includes(order.status) && (
+                      {order.pickupOtp &&
+                        ['packed', 'ready_for_pickup', 'rider_assigned', 'picked_up', 'out_for_delivery'].includes(
+                          order.status
+                        ) && (
                         <p className="flex items-center gap-2 text-orange-800 font-semibold">
                           <KeyRound className="w-4 h-4" />
                           Share this pickup OTP with the rider: <strong className="tracking-widest">{order.pickupOtp}</strong>
@@ -252,12 +274,6 @@ const SellerOrdersPage: React.FC = () => {
                         <p className="flex items-start gap-2">
                           <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                           Pickup: {order.storeAddress}
-                        </p>
-                      )}
-                      {order.customerAddress && (
-                        <p className="flex items-start gap-2">
-                          <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
-                          Drop: {order.customerAddress}
                         </p>
                       )}
                       <div className="space-y-2 pt-1">
@@ -294,12 +310,17 @@ const SellerOrdersPage: React.FC = () => {
                         </Button>
                       )}
                       {order.id &&
-                        CANCELLABLE_ORDER_STATUSES.includes(order.status) &&
+                        SELLER_CANCELLABLE_STATUSES.includes(order.status) &&
                         !order.pickupVerified && (
                           <Button variant="secondary" onClick={() => handleCancel(order)}>
                             Cancel order
                           </Button>
                         )}
+                      {order.id && ['placed', 'payment_confirmed'].includes(order.status) && (
+                        <Button variant="secondary" onClick={() => handleReject(order)}>
+                          Reject order
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canTransitionOrderStatus } from '@/lib/orders/transitions';
-import type { OrderStatus } from '@/lib/orders/types';
+import { canActorSetStatus, canTransitionOrderStatus } from '@/lib/orders/transitions';
+import { normalizeOrderStatus, type OrderStatus } from '@/lib/orders/types';
+import { redactOrderForActor, resolveOrderActor } from '@/lib/server/order-access';
 import {
   adjustProductStock,
   logOrderEvent,
@@ -24,7 +25,10 @@ export async function GET(
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
-    return NextResponse.json({ order: data });
+    if (!data) return NextResponse.json({ order: null });
+    const actor = await resolveOrderActor(user, data);
+    if (!actor) return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
+    return NextResponse.json({ order: redactOrderForActor(data, actor) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Could not load order' },
@@ -47,24 +51,52 @@ export async function PATCH(
     const admin = getSupabaseAdminClient();
     const { data: current, error: loadError } = await admin
       .from('orders')
-      .select('id, status, items')
+      .select('*')
       .eq('id', id)
       .maybeSingle();
     if (loadError) throw loadError;
     if (!current) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
-    const nextStatus = body.fields.status ? String(body.fields.status) as OrderStatus : null;
-    const currentStatus = String(current.status || 'placed') as OrderStatus;
-    if (nextStatus && !canTransitionOrderStatus(currentStatus, nextStatus)) {
-      return NextResponse.json(
-        { error: `Cannot change order from ${currentStatus} to ${nextStatus}` },
-        { status: 409 }
-      );
+    const actor = await resolveOrderActor(user, current);
+    if (!actor) return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
+
+    const fields = { ...body.fields };
+    if (actor === 'seller') {
+      delete fields.customer_address;
+      delete fields.customer_location;
+      delete fields.delivery_otp;
+      delete fields.delivery_partner_id;
+    }
+    if (actor === 'customer') {
+      delete fields.status;
+      delete fields.cancelled_at;
+      delete fields.cancel_reason;
+    }
+    if (
+      actor !== 'admin' &&
+      ['cancelled', 'rejected'].includes(normalizeOrderStatus(current.status))
+    ) {
+      return NextResponse.json({ error: 'This order is closed' }, { status: 409 });
+    }
+
+    const nextStatus = fields.status ? normalizeOrderStatus(fields.status) : null;
+    const currentStatus = normalizeOrderStatus(current.status);
+    if (nextStatus) {
+      if (!canTransitionOrderStatus(currentStatus, nextStatus)) {
+        return NextResponse.json(
+          { error: `Cannot change order from ${currentStatus} to ${nextStatus}` },
+          { status: 409 }
+        );
+      }
+      if (!canActorSetStatus(actor, currentStatus, nextStatus)) {
+        return NextResponse.json({ error: 'This role cannot make that status change' }, { status: 403 });
+      }
+      fields.status = nextStatus;
     }
 
     const { error } = await admin
       .from('orders')
-      .update({ ...body.fields, updated_at: new Date().toISOString() })
+      .update({ ...fields, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
 
@@ -72,13 +104,13 @@ export async function PATCH(
       await logOrderEvent({
         orderId: id,
         actorId: user.id,
-        actorRole: 'user',
+        actorRole: actor,
         source: 'order_patch',
         fromStatus: currentStatus,
         toStatus: nextStatus,
-        reason: body.fields.cancel_reason ? String(body.fields.cancel_reason) : null,
+        reason: fields.cancel_reason ? String(fields.cancel_reason) : null,
       });
-      if (nextStatus === 'cancelled') {
+      if (nextStatus === 'cancelled' || nextStatus === 'rejected') {
         const items = Array.isArray(current.items) ? current.items : [];
         await adjustProductStock(
           items.map((item: any) => ({

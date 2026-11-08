@@ -1,7 +1,7 @@
 import { estimateDeliveryMinutes, getDistance } from '@/utils/distance';
 import type { CartItem } from '@/contexts/CartContext';
 import type { GeoPoint, OrderItem, OrderRecord, PaymentStatus, StoreLocation } from './types';
-import { applyCoupon } from '@/lib/ops/rules';
+import { applyCoupon, deliveryFeeFor, sellerPayout } from '@/lib/ops/rules';
 
 const PACK_SLA_MINUTES = 30;
 
@@ -96,12 +96,14 @@ export function buildOrderDraft(params: {
   );
   const merchandise = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const coupon = applyCoupon(merchandise, params.couponCode);
-  const total = coupon.amount;
-  const paymentMethod = params.paymentMethod || 'razorpay';
   const { distanceKm, etaMinutes } = computeDistanceAndEta(
     params.customerLocation,
     params.seller.storeLocation
   );
+  const shipping = deliveryFeeFor(distanceKm);
+  const total = coupon.amount + shipping;
+  const payout = sellerPayout(total);
+  const paymentMethod = params.paymentMethod || 'razorpay';
   const now = new Date();
   const packByDeadline = new Date(now.getTime() + PACK_SLA_MINUTES * 60 * 1000);
 
@@ -121,16 +123,19 @@ export function buildOrderDraft(params: {
     storeAddress: params.seller.storeAddress,
     storePhone: params.seller.storePhone,
     items: cartItemsToOrderItems(params.items),
-    status: 'placed',
+    status: paymentMethod === 'cod' ? 'placed' : 'payment_confirmed',
     paymentStatus: params.paymentStatus || (paymentMethod === 'cod' ? 'pending' : 'paid'),
     paymentMethod,
     paymentId: params.paymentId,
     razorpayOrderId: params.razorpayOrderId,
+    paymentAttemptId: params.paymentId
+      ? `att_${params.paymentId}`
+      : `att_${params.orderGroupId}_${Date.now()}`,
     subtotal,
     discount: discount + coupon.discount,
-    shipping: 0,
+    shipping,
     tax: 0,
-    fees: 0,
+    fees: payout.commission,
     total,
     distanceKm,
     etaMinutes,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { redactDeliveryJob } from '@/lib/server/order-access';
 import { getRequestUser } from '@/lib/server/request-user';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json({ jobs: data || [] });
+    return NextResponse.json({ jobs: (data || []).map((row) => redactDeliveryJob(row)) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Could not load jobs' },
@@ -33,6 +34,13 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
     const body = (await request.json()) as { job?: Record<string, unknown> };
     if (!body.job) return NextResponse.json({ error: 'job required' }, { status: 400 });
+    const sellerId = String(body.job.seller_id || '');
+    const { resolveAccountKeys, isAdminEmail } = await import('@/lib/server/request-user');
+    const adminUser = await isAdminEmail(user.email);
+    const keys = await resolveAccountKeys(user);
+    if (!adminUser && sellerId && !keys.includes(sellerId) && sellerId !== user.id) {
+      return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
+    }
 
     const { error } = await getSupabaseAdminClient().from('delivery_jobs').insert(body.job);
     if (error) throw error;

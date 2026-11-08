@@ -515,13 +515,13 @@ const AddAddressForm: React.FC<{
 
         <section>
           <h3 className="text-base font-bold text-neutral-900">
-            Delivery instructions <span className="font-medium text-neutral-400">(Recommended)</span>
+            Delivery instructions / landmark <span className="font-medium text-neutral-400">(Recommended)</span>
           </h3>
           <div className="relative mt-3">
             <input
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Instructions to reach location"
+              placeholder="Landmark or instructions to reach location"
               className="h-12 w-full rounded-xl border border-neutral-200 px-3 pr-16 text-sm outline-none focus:border-orange-400"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-orange-700">

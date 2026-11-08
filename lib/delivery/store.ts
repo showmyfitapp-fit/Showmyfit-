@@ -53,13 +53,27 @@ export async function isDeliveryPartner(userId: string): Promise<boolean> {
 
 export async function setDeliveryPartnerOnline(
   _userId: string,
-  isOnline: boolean
+  isOnline: boolean,
+  availabilityStatus?: DeliveryPartner['availabilityStatus']
 ): Promise<DeliveryPartner> {
   const { partner } = await apiRequest<{ partner: DeliveryPartner }>('/api/delivery/me', {
     method: 'PATCH',
-    body: JSON.stringify({ isOnline }),
+    body: JSON.stringify({ isOnline, availabilityStatus }),
   });
   return partner;
+}
+
+export async function declineDeliveryJob(jobId: string): Promise<void> {
+  await apiRequest(`/api/delivery/jobs/${jobId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      fields: {
+        status: 'available',
+        delivery_partner_id: null,
+        delivery_partner_name: null,
+      },
+    }),
+  });
 }
 
 export async function fetchDeliveryPartners(): Promise<DeliveryPartner[]> {
@@ -171,6 +185,7 @@ export async function acceptDeliveryJob(
     await updateOrderFields(job.orderId, {
       deliveryPartnerId: partnerId,
       deliveryPartnerName: partnerName,
+      status: 'rider_assigned',
     });
     await requestOrderAlert('job_assigned', job.orderId);
   }
@@ -197,7 +212,10 @@ export async function verifyPickupOtp(jobId: string, enteredOtp: string): Promis
       pickupVerifiedAt: new Date(),
     });
     const order = await fetchOrderById(job.orderId);
-    if (order?.status === 'packed') await markOutForDelivery(job.orderId);
+    if (order && ['packed', 'ready_for_pickup', 'rider_assigned', 'picked_up'].includes(order.status)) {
+      await updateOrderFields(job.orderId, { status: 'picked_up' });
+      await markOutForDelivery(job.orderId);
+    }
     await requestOrderAlert('picked_up', job.orderId);
   }
   return true;

@@ -146,6 +146,15 @@ const Chatbot: React.FC = () => {
           'Contact seller'
         ]
       };
+    } else if (input.includes('human') || input.includes('agent') || input.includes('person')) {
+      response = {
+        id: Date.now().toString(),
+        text: 'I can connect you to a person. Open My Orders and tap Get Help so we create a support ticket linked to your order.',
+        sender: 'bot',
+        timestamp: new Date(),
+        type: 'text',
+        suggestions: ['Get Help', 'Check order status'],
+      };
     } else if (input.includes('help') || input.includes('support')) {
       response = {
         id: Date.now().toString(),

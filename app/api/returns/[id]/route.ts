@@ -26,7 +26,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Admin only' }, { status: 403 });
     }
     const { id } = await params;
-    const body = (await request.json()) as { status?: string; rejectionReason?: string };
+    const body = (await request.json()) as {
+      status?: string;
+      rejectionReason?: string;
+      inspectionOutcome?: string;
+    };
     if (!body.status) return NextResponse.json({ error: 'status required' }, { status: 400 });
 
     const admin = getSupabaseAdminClient();
@@ -41,10 +45,31 @@ export async function PATCH(
       .update({
         status: body.status,
         rejection_reason: body.rejectionReason || current.rejection_reason,
+        inspection_outcome: body.inspectionOutcome || current.inspection_outcome,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);
     if (error) throw error;
+    if (body.status === 'completed' && current.order_id) {
+      const exchanged = Boolean(current.answers?.exchangeSize || current.answers?.exchange);
+      await admin
+        .from('orders')
+        .update({
+          status: exchanged ? 'exchanged' : 'returned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', current.order_id);
+    }
+    if (current.user_id) {
+      await admin.from('notifications').insert({
+        user_id: current.user_id,
+        type: 'return_update',
+        title: 'Return update',
+        message: `Return for ${current.order_number} is now ${body.status}.`,
+        order_id: current.order_id,
+        order_number: current.order_number,
+      });
+    }
     if (body.status === 'completed' && current.product_id) {
       try {
         const { data: product } = await admin

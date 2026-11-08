@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { redactDeliveryJob } from '@/lib/server/order-access';
 import { getRequestUser } from '@/lib/server/request-user';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
@@ -18,7 +19,7 @@ export async function GET(
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
-    return NextResponse.json({ job: data });
+    return NextResponse.json({ job: data ? redactDeliveryJob(data) : data });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Could not load job' },

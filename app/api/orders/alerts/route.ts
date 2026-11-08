@@ -214,7 +214,14 @@ export async function POST(request: NextRequest) {
     await Promise.all(
       recipients.map(async (recipient) => {
         const link = recipient.role === 'delivery' ? deliveryLink : sellerLink;
-        const message = buildMessage(body.event!, order, link, recipient.role);
+        const message = buildMessage(
+          body.event!,
+          recipient.role === 'seller'
+            ? { ...order, customerAddress: undefined, customerLocation: null }
+            : order,
+          link,
+          recipient.role
+        );
         await notifyInApp(recipient.userIds, {
           type: recipient.role === 'delivery' && body.event === 'new_order'
             ? 'new_order_delivery'

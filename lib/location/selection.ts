@@ -79,6 +79,13 @@ export function writeSelectedLocation(next: SelectedLocation) {
   window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: next }));
 }
 
+export function clearSessionLocation() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(SELECTED_LOCATION_KEY);
+  localStorage.removeItem(GUEST_ADDRESSES_KEY);
+  window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: null }));
+}
+
 export function withCachedPincode(addresses: SavedAddress[], cached: SavedAddress[]) {
   const byId = new Map(cached.map((item) => [item.id, item]));
   const byKey = new Map(cached.map((item) => [addressMatchKey(item), item]));

@@ -51,6 +51,16 @@ export async function POST(request: NextRequest) {
     if (!body.orderId || !body.answers?.reason) {
       return NextResponse.json({ error: 'Order and return reason are required' }, { status: 400 });
     }
+    if (body.answers.exchangeSize && body.productId) {
+      const { data: product } = await getSupabaseAdminClient()
+        .from('products')
+        .select('id, stock')
+        .eq('id', body.productId)
+        .maybeSingle();
+      if (!product || Number(product.stock || 0) < 1) {
+        return NextResponse.json({ error: 'Exchange size/variant is out of stock' }, { status: 409 });
+      }
+    }
 
     const admin = getSupabaseAdminClient();
     const { data: order } = await admin.from('orders').select('*').eq('id', body.orderId).maybeSingle();
@@ -83,6 +93,12 @@ export async function POST(request: NextRequest) {
       .select('id, status')
       .single();
     if (error) throw error;
+
+    await admin
+      .from('orders')
+      .update({ status: 'return_requested', updated_at: new Date().toISOString() })
+      .eq('id', body.orderId)
+      .eq('status', 'delivered');
 
     await admin.from('notifications').insert({
       user_id: order.seller_id,

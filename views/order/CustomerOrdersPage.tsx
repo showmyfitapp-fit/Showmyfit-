@@ -10,16 +10,14 @@ import {
   Truck,
   CheckCircle,
   ArrowLeft,
-  KeyRound,
   Store,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import {
-  cancelOrder,
-  CANCELLABLE_ORDER_STATUSES,
   fetchCustomerOrders,
   ORDER_STATUS_LABELS,
+  paymentStatusLabel,
   type OrderRecord,
 } from '@/lib/orders';
 import { subscribeTable } from '@/lib/realtime/subscribe';
@@ -50,19 +48,6 @@ const CustomerOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [returnOrder, setReturnOrder] = useState<OrderRecord | null>(null);
-
-  const handleCancel = async (order: OrderRecord) => {
-    if (!order.id) return;
-    if (!window.confirm(`Cancel order ${order.orderNumber}?`)) return;
-    try {
-      await cancelOrder(order.id);
-      setMessage(`Order ${order.orderNumber} cancelled`);
-      const next = await fetchCustomerOrders(currentUser?.uid);
-      setOrders(next);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not cancel this order');
-    }
-  };
 
   useEffect(() => {
     if (!currentUser) return;
@@ -101,7 +86,7 @@ const CustomerOrdersPage: React.FC = () => {
           Back to profile
         </Link>
         <h1 className="text-3xl font-black text-gray-900 mb-2">My Orders</h1>
-        <p className="text-gray-600 mb-8">Track distance, ETA, pickup code, and delivery status.</p>
+        <p className="text-gray-600 mb-8">Track distance, ETA, and delivery status.</p>
         {message && (
           <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-sm">
             {message}
@@ -147,6 +132,11 @@ const CustomerOrdersPage: React.FC = () => {
                       <p className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-purple-600" />
                         ~{order.etaMinutes} min estimated delivery
+                        {order.status === 'out_for_delivery' &&
+                        order.outForDeliveryAt &&
+                        Date.now() - order.outForDeliveryAt.getTime() > order.etaMinutes * 60 * 1000
+                          ? ' · delayed'
+                          : ''}
                       </p>
                     )}
                     {order.packByDeadline && ['placed', 'accepted'].includes(order.status) && (
@@ -156,27 +146,26 @@ const CustomerOrdersPage: React.FC = () => {
                       </p>
                     )}
                     <p className="font-bold text-gray-900 text-base">₹{order.total.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500">{paymentStatusLabel(order)}</p>
+                    <ol className="text-xs text-gray-500 space-y-1">
                       {[
-                        order.placedAt && `Placed ${order.placedAt.toLocaleString()}`,
-                        order.acceptedAt && `Accepted`,
-                        order.packedAt && `Packed`,
-                        order.outForDeliveryAt && `Out for delivery`,
-                        order.deliveredAt && `Delivered`,
+                        order.placedAt && `Order Placed · ${order.placedAt.toLocaleString()}`,
+                        order.acceptedAt && 'Seller Accepted',
+                        order.packedAt && 'Ready for Pickup',
+                        order.outForDeliveryAt && 'Out for Delivery',
+                        order.deliveredAt && 'Delivered',
+                        order.status === 'return_requested' && 'Return Requested',
+                        order.status === 'returned' && 'Returned',
+                        order.status === 'cancelled' && 'Cancelled',
                       ]
                         .filter(Boolean)
-                        .join(' → ')}
-                    </p>
+                        .map((step) => (
+                          <li key={String(step)}>{step}</li>
+                        ))}
+                    </ol>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="p-3 bg-gray-50 rounded-xl">
-                      <p className="text-xs font-bold uppercase text-gray-500 mb-1 flex items-center gap-1">
-                        <KeyRound className="w-3 h-3" />
-                        Store pickup code
-                      </p>
-                      <p className="text-2xl font-black tracking-widest text-gray-900">{order.pickupCode}</p>
-                    </div>
                     {order.status === 'out_for_delivery' && order.deliveryOtp && (
                       <div className="p-3 bg-green-50 rounded-xl border border-green-100">
                         <p className="text-xs font-bold uppercase text-green-700 mb-1">Delivery OTP</p>
@@ -215,13 +204,6 @@ const CustomerOrdersPage: React.FC = () => {
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2 mt-4">
-                    {order.id &&
-                      CANCELLABLE_ORDER_STATUSES.includes(order.status) &&
-                      !order.pickupVerified && (
-                        <Button variant="secondary" onClick={() => handleCancel(order)}>
-                          Cancel order
-                        </Button>
-                      )}
                     {order.status === 'delivered' && (
                       <Button variant="outline" onClick={() => setReturnOrder(order)}>
                         Return item

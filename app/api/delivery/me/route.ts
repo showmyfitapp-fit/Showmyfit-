@@ -26,14 +26,25 @@ export async function PATCH(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
     }
-    const body = (await request.json()) as { isOnline?: boolean };
-    if (typeof body.isOnline !== 'boolean') {
+    const body = (await request.json()) as { isOnline?: boolean; availabilityStatus?: string };
+    if (typeof body.isOnline !== 'boolean' && !body.availabilityStatus) {
       return NextResponse.json({ error: 'isOnline is required' }, { status: 400 });
     }
-    const partner = await setPartnerOnline(user.id, body.isOnline, {
+    const isOnline =
+      typeof body.isOnline === 'boolean'
+        ? body.isOnline
+        : !['offline', 'paused', 'suspended'].includes(String(body.availabilityStatus));
+    const partner = await setPartnerOnline(user.id, isOnline, {
       email: user.email,
       name: user.user_metadata?.full_name || user.email || 'Delivery partner',
       createIfMissing: await isAdminEmail(user.email),
+      availabilityStatus: body.availabilityStatus as
+        | 'online'
+        | 'offline'
+        | 'busy'
+        | 'paused'
+        | 'suspended'
+        | undefined,
     });
     return NextResponse.json({ partner });
   } catch (error) {

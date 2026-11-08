@@ -46,11 +46,15 @@ export function useLocationSelection() {
   };
 
   useEffect(() => {
+    if (authLoading) return;
     const selected = readSelectedLocation();
     if (selected) {
       applySelected(selected);
       return;
     }
+    setPlace('');
+    setPincode('');
+    setSelectedAddressId(undefined);
 
     navigator.permissions
       ?.query({ name: 'geolocation' })
@@ -58,7 +62,7 @@ export function useLocationSelection() {
         if (status.state === 'granted') void enableLocation(false);
       })
       .catch(() => undefined);
-  }, []);
+  }, [authLoading, currentUser?.id]);
 
   useEffect(() => {
     const sync = () => applySelected(readSelectedLocation());
@@ -76,6 +80,10 @@ export function useLocationSelection() {
 
     const loadAddresses = async () => {
       const authUserId = currentUser?.id;
+      if (!cancelled) {
+        setAddressesReady(false);
+        setAddresses([]);
+      }
       const cached = readJson<SavedAddress[]>(addressCacheKey(authUserId), []);
       if (!cancelled) setAddresses(withCachedPincode(cached, cached));
 

@@ -74,12 +74,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (amount && paymentData.amount !== Math.round(Number(amount) * 100)) {
+        if (!paymentData.order_id || paymentData.order_id !== orderId) {
             return NextResponse.json(
-                { verified: false, error: 'Payment amount does not match the order total' },
+                { verified: false, error: 'Payment does not belong to this Razorpay order' },
                 { status: 400 }
             );
         }
+        void amount;
 
         console.log('✅ Payment verified successfully');
         return NextResponse.json({

@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiRequest } from '@/lib/api/browser';
-import { fetchAllOrders, type OrderRecord } from '@/lib/orders';
+import { cancelOrder, fetchAllOrders, type OrderRecord } from '@/lib/orders';
 import Button from '@/components/ui/Button';
 
-type Tab = 'payments' | 'cancellations' | 'returns' | 'tickets';
+type Tab = 'payments' | 'cancellations' | 'returns' | 'tickets' | 'history';
 
 export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab?: Tab }) {
   const { currentUser, userData } = useAuth();
@@ -16,6 +16,7 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
   const [returns, setReturns] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [message, setMessage] = useState('');
+  const [history, setHistory] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     if (userData?.role !== 'admin') return;
@@ -60,8 +61,23 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
       <Link href="/admin" className="text-sm text-gray-600">Back to admin</Link>
       <h1 className="text-3xl font-black mt-2 mb-4">Payments, cancellations, returns</h1>
       {message && <p className="mb-4 text-sm text-blue-800">{message}</p>}
+      <div className="grid sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 text-xs">
+        {[
+          ['Open', orders.filter((o) => !['delivered', 'cancelled', 'rejected', 'refunded'].includes(o.status)).length],
+          ['Unassigned', orders.filter((o) => o.status === 'packed' && !o.deliveryPartnerId).length],
+          ['Delayed pack', orders.filter((o) => o.packByDeadline && o.packByDeadline < new Date() && ['placed', 'accepted', 'preparing'].includes(o.status)).length],
+          ['Failed pay', orders.filter((o) => o.paymentStatus === 'failed').length],
+          ['Cancelled', orders.filter((o) => o.status === 'cancelled').length],
+          ['Returns', returns.length],
+        ].map(([label, count]) => (
+          <div key={String(label)} className="bg-white border rounded-xl p-3">
+            <p className="text-gray-500">{label}</p>
+            <p className="text-xl font-black">{count}</p>
+          </div>
+        ))}
+      </div>
       <div className="flex gap-2 mb-6">
-        {(['payments', 'cancellations', 'returns', 'tickets'] as Tab[]).map((key) => (
+        {(['payments', 'cancellations', 'returns', 'tickets', 'history'] as Tab[]).map((key) => (
           <button
             key={key}
             type="button"
@@ -87,9 +103,46 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
                   {order.paymentId ? ` · ${order.paymentId}` : ''}
                 </p>
               </div>
-              {order.paymentStatus === 'paid' && (
-                <Button size="sm" onClick={() => refund(order)}>Refund</Button>
-              )}
+              <div className="flex flex-col gap-1">
+                {order.paymentStatus === 'paid' && (
+                  <Button size="sm" onClick={() => refund(order)}>Refund</Button>
+                )}
+                {order.id && order.status !== 'cancelled' && order.status !== 'delivered' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      await cancelOrder(order.id!, { force: true });
+                      setMessage(`Cancelled ${order.orderNumber}`);
+                      setOrders(await fetchAllOrders());
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                {order.id && order.deliveryPartnerId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      await apiRequest(`/api/orders/${order.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({
+                          fields: {
+                            delivery_partner_id: null,
+                            delivery_partner_name: null,
+                            status: 'packed',
+                          },
+                        }),
+                      });
+                      setMessage(`Rider cleared for ${order.orderNumber}`);
+                      setOrders(await fetchAllOrders());
+                    }}
+                  >
+                    Reassign rider
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -122,6 +175,35 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
                     </Button>
                   ))}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="space-y-2">
+          {orders.slice(0, 40).map((order) => (
+            <div key={order.id} className="bg-white border rounded-xl p-4">
+              <div className="flex justify-between gap-3">
+                <p className="font-bold">{order.orderNumber} · {order.status}</p>
+                {order.id && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const data = await apiRequest<{ events: any[] }>(`/api/orders/${order.id}/events`);
+                      setHistory((prev) => ({ ...prev, [order.id!]: data.events || [] }));
+                    }}
+                  >
+                    History
+                  </Button>
+                )}
+              </div>
+              {(history[order.id || ''] || []).map((event) => (
+                <p key={event.id} className="text-xs text-gray-600 mt-1">
+                  {event.from_status || '—'} → {event.to_status || '—'} · {event.actor_role} · {event.reason || event.source}
+                </p>
+              ))}
             </div>
           ))}
         </div>

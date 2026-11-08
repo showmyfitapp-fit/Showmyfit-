@@ -124,6 +124,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signOut = async () => {
+    const { clearSessionLocation } = await import('@/lib/location/selection');
+    clearSessionLocation();
     await signOutUser();
     await loadUser(null);
   };

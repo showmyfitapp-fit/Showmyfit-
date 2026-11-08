@@ -1,13 +1,25 @@
 export type OrderStatus =
   | 'placed'
+  | 'payment_confirmed'
   | 'accepted'
+  | 'preparing'
   | 'packed'
+  | 'ready_for_pickup'
+  | 'rider_assigned'
+  | 'picked_up'
   | 'out_for_delivery'
   | 'delivered'
   | 'cancelled'
-  | 'failed_delivery';
+  | 'failed_delivery'
+  | 'rejected'
+  | 'payment_failed'
+  | 'return_requested'
+  | 'returned'
+  | 'refunded'
+  | 'exchanged';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+export type OrderActor = 'customer' | 'seller' | 'rider' | 'admin';
 
 export interface OrderItem {
   productId: string;
@@ -39,21 +51,17 @@ export interface OrderRecord {
   deliveryOtp?: string | null;
   deliveryPartnerId?: string | null;
   deliveryPartnerName?: string | null;
-
   userId: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
   customerAddress?: string;
-
   sellerId: string;
   sellerName: string;
   storeLocation?: StoreLocation | null;
   storeAddress?: string;
   storePhone?: string;
-
   items: OrderItem[];
-
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentMethod: string;
@@ -66,16 +74,13 @@ export interface OrderRecord {
   cancelReason?: string;
   tax?: number;
   fees?: number;
-
   subtotal: number;
   discount: number;
   shipping: number;
   total: number;
-
   distanceKm?: number | null;
   etaMinutes?: number | null;
   customerLocation?: GeoPoint | null;
-
   packByDeadline?: Date | null;
   placedAt?: Date | null;
   acceptedAt?: Date | null;
@@ -89,23 +94,72 @@ export interface OrderRecord {
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   placed: 'Order Placed',
-  accepted: 'Accepted by Store',
-  packed: 'Packed & Ready',
+  payment_confirmed: 'Payment Confirmed',
+  accepted: 'Seller Accepted',
+  preparing: 'Preparing',
+  packed: 'Ready for Pickup',
+  ready_for_pickup: 'Ready for Pickup',
+  rider_assigned: 'Rider Assigned',
+  picked_up: 'Picked Up',
   out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
   failed_delivery: 'Delivery Failed',
+  rejected: 'Seller Rejected',
+  payment_failed: 'Payment Failed',
+  return_requested: 'Return Requested',
+  returned: 'Returned',
+  refunded: 'Refunded',
+  exchanged: 'Exchanged',
 };
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  pending: 'COD Pending',
+  paid: 'Paid',
+  failed: 'Failed',
+  refunded: 'Refunded',
+};
+
+export function paymentStatusLabel(order: Pick<OrderRecord, 'paymentStatus' | 'paymentMethod'>) {
+  if (order.paymentStatus === 'pending' && !/cod|cash/i.test(order.paymentMethod || '')) {
+    return 'Pending';
+  }
+  return PAYMENT_STATUS_LABELS[order.paymentStatus] || order.paymentStatus;
+}
+
+const LEGACY: Record<string, OrderStatus> = {
+  confirmed: 'payment_confirmed',
+  shipped: 'out_for_delivery',
+  ofd: 'out_for_delivery',
+  pending: 'placed',
+};
+
+export function normalizeOrderStatus(status: unknown): OrderStatus {
+  const raw = String(status || 'placed');
+  return (LEGACY[raw] || raw) as OrderStatus;
+}
+
+export function isReadyForPickup(status: OrderStatus) {
+  return status === 'packed' || status === 'ready_for_pickup';
+}
 
 export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   'placed',
+  'payment_confirmed',
   'accepted',
+  'preparing',
   'packed',
+  'ready_for_pickup',
+  'rider_assigned',
+  'picked_up',
   'out_for_delivery',
 ];
 
-export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = [
+export const SELLER_CANCELLABLE_STATUSES: OrderStatus[] = [
   'placed',
+  'payment_confirmed',
   'accepted',
-  'packed',
+  'preparing',
 ];
+
+export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = [...SELLER_CANCELLABLE_STATUSES];

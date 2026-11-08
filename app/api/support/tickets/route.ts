@@ -33,8 +33,10 @@ export async function POST(request: NextRequest) {
       orderId?: string;
       category?: string;
       message?: string;
+      evidence?: string[];
     };
     if (!body.message) return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    const due = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await getSupabaseAdminClient()
       .from('support_tickets')
       .insert({
@@ -42,6 +44,8 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         category: body.category || 'general',
         message: body.message,
+        evidence: body.evidence || [],
+        sla_due_at: due,
         status: 'open',
       })
       .select('id, status')

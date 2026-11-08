@@ -40,7 +40,12 @@ export async function findDeliveryPartner(
 export async function setPartnerOnline(
   userId: string,
   isOnline: boolean,
-  options?: { email?: string | null; name?: string; createIfMissing?: boolean }
+  options?: {
+    email?: string | null;
+    name?: string;
+    createIfMissing?: boolean;
+    availabilityStatus?: DeliveryPartner['availabilityStatus'];
+  }
 ): Promise<DeliveryPartner> {
   let partner = await findDeliveryPartner(userId, options?.email);
   if (!partner && options?.createIfMissing) {
@@ -59,6 +64,8 @@ export async function setPartnerOnline(
     .from('delivery_partners')
     .update({
       is_online: isOnline,
+      availability_status:
+        options?.availabilityStatus || (isOnline ? 'online' : 'offline'),
       last_online_at: new Date().toISOString(),
     })
     .eq('id', partner.id)

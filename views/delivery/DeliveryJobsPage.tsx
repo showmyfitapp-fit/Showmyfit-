@@ -20,6 +20,7 @@ import Button from '@/components/ui/Button';
 import {
   acceptDeliveryJob,
   completeDeliveryJob,
+  declineDeliveryJob,
   enableDeliveryPartner,
   fetchDeliveryJobByOrderId,
   fetchDeliveryJobs,
@@ -153,7 +154,7 @@ function JobOrderDetail({
             <p className="font-semibold text-gray-900">{customerName}</p>
             <p className="text-gray-900 flex items-start gap-2 mt-1">
               <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
-              {dropAddress}
+              {status === 'available' ? 'Shown after you accept this pickup' : dropAddress}
             </p>
             {customerPhone && (
               <a href={`tel:${customerPhone}`} className="inline-flex items-center gap-1 text-green-800 font-semibold mt-2">
@@ -422,12 +423,42 @@ const DeliveryJobsPage: React.FC = () => {
     if (!job.orderId) return;
     const reason = window.prompt('Failed delivery reason (customer unreachable, address invalid, refused, other)') || 'unspecified';
     try {
-      await updateOrderStatus(job.orderId, 'failed_delivery');
+      await updateOrderStatus(job.orderId, 'failed_delivery', { cancel_reason: reason });
       setMessage(`Marked ${job.orderNumber} as failed delivery (${reason})`);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not mark failed delivery');
     }
+  };
+
+  const handleRetryDelivery = async (job: DeliveryJob) => {
+    if (!job.orderId) return;
+    try {
+      await updateOrderStatus(job.orderId, 'out_for_delivery');
+      setMessage(`Retrying delivery for ${job.orderNumber}`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not retry delivery');
+    }
+  };
+
+  const handleDecline = async (job: DeliveryJob) => {
+    if (!job.id) return;
+    try {
+      await declineDeliveryJob(job.id);
+      if (job.orderId) await updateOrderStatus(job.orderId, 'packed');
+      setMessage(`Released ${job.orderNumber} for another rider`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not decline this job');
+    }
+  };
+
+  const setAvailability = async (status: 'online' | 'offline' | 'busy' | 'paused' | 'suspended') => {
+    if (!currentUser) return;
+    const updated = await setDeliveryPartnerOnline(currentUser.uid, status === 'online', status);
+    setIsOnline(updated.isOnline);
+    setMessage(`Availability: ${status}`);
   };
 
   if (!currentUser) {
@@ -513,6 +544,13 @@ const DeliveryJobsPage: React.FC = () => {
               }`}
             />
           </button>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(['online', 'busy', 'paused', 'offline'] as const).map((status) => (
+            <Button key={status} size="sm" variant="outline" onClick={() => setAvailability(status)}>
+              {status}
+            </Button>
+          ))}
         </div>
 
         {isAdmin && (
@@ -639,7 +677,7 @@ const DeliveryJobsPage: React.FC = () => {
                       <p className="text-xs font-bold uppercase text-green-800 mb-1">Drop</p>
                       <p className="text-gray-900 flex items-start gap-2">
                         <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
-                        {job.dropAddress}
+                        {job.status === 'available' ? 'Shown after you accept this pickup' : job.dropAddress}
                       </p>
                       <p className="text-gray-600 mt-1">{job.customerName}</p>
                       {job.customerPhone && (
@@ -695,6 +733,9 @@ const DeliveryJobsPage: React.FC = () => {
 
                   {job.status === 'assigned' && (
                     <div className="space-y-2">
+                      <Button variant="outline" onClick={() => handleDecline(job)}>
+                        Reject / release job
+                      </Button>
                       <p className="text-xs text-gray-500 flex items-center gap-1">
                         <KeyRound className="w-3 h-3" />
                         Enter the seller pickup OTP
@@ -737,6 +778,9 @@ const DeliveryJobsPage: React.FC = () => {
                       </Button>
                       <Button variant="outline" onClick={() => handleFailedDelivery(job)}>
                         Failed delivery
+                      </Button>
+                      <Button variant="outline" onClick={() => handleRetryDelivery(job)}>
+                        Retry / reschedule
                       </Button>
                     </div>
                   )}

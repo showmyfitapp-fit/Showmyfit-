@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, isAdminEmail, resolveAccountKeys } from '@/lib/server/request-user';
+import { redactOrderForActor } from '@/lib/server/order-access';
 import { adjustProductStock, logOrderEvent } from '@/lib/server/order-side-effects';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
@@ -31,7 +32,10 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json({ orders: data || [] });
+    const actor = admin ? 'admin' : scope === 'seller' ? 'seller' : 'customer';
+    return NextResponse.json({
+      orders: (data || []).map((row) => redactOrderForActor(row, actor)),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Could not load orders' },
@@ -49,6 +53,10 @@ export async function POST(request: NextRequest) {
     if (!body.order) return NextResponse.json({ error: 'Order is required' }, { status: 400 });
 
     const paymentId = body.order.payment_id ? String(body.order.payment_id) : '';
+    const paymentMethod = String(body.order.payment_method || 'razorpay');
+    if (!/cod|cash/i.test(paymentMethod) && !paymentId) {
+      return NextResponse.json({ error: 'Verified payment is required for online orders' }, { status: 400 });
+    }
     const admin = getSupabaseAdminClient();
     if (paymentId) {
       const { data: existing } = await admin
@@ -62,20 +70,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const distanceKm = body.order.distance_km != null ? Number(body.order.distance_km) : null;
+    if (distanceKm != null && distanceKm > 20) {
+      return NextResponse.json({ error: 'Address is outside the store delivery radius' }, { status: 400 });
+    }
+    if (Number(body.order.total || 0) < 1) {
+      return NextResponse.json({ error: 'Order total is below the minimum' }, { status: 400 });
+    }
+    const items = Array.isArray(body.order.items) ? body.order.items : [];
+    const stockItems = items.map((item: any) => ({
+      productId: item.productId || item.product_id,
+      quantity: item.quantity,
+    }));
+    await adjustProductStock(stockItems, 'reserve');
     const { data, error } = await admin
       .from('orders')
-      .insert({ ...body.order, user_id: body.order.user_id || user.id })
+      .insert({ ...body.order, user_id: user.id })
       .select('id')
       .single();
-    if (error) throw error;
-    const items = Array.isArray(body.order.items) ? body.order.items : [];
-    await adjustProductStock(
-      items.map((item: any) => ({
-        productId: item.productId || item.product_id,
-        quantity: item.quantity,
-      })),
-      'reserve'
-    );
+    if (error) {
+      await adjustProductStock(stockItems, 'release');
+      throw error;
+    }
     await logOrderEvent({
       orderId: data.id,
       actorId: user.id,

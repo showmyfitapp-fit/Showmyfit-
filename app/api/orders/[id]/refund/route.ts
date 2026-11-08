@@ -58,8 +58,12 @@ export async function POST(
 
     await safeUpdateOrder(id, {
       payment_status: 'refunded',
+      status: 'refunded',
       refund_id: refundId,
       refund_amount: amount,
+      refund_reason: body.reason || 'admin_refund',
+      refund_status: 'completed',
+      refunded_at: new Date().toISOString(),
     });
     await logOrderEvent({
       orderId: id,

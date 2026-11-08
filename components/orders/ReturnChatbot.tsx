@@ -30,6 +30,7 @@ export default function ReturnChatbot({
   const [used, setUsed] = useState('');
   const [details, setDetails] = useState('');
   const [images, setImages] = useState<string[]>([]);
+  const [exchangeSize, setExchangeSize] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,7 +65,7 @@ export default function ReturnChatbot({
           orderId: order.id,
           productId: item?.productId,
           productName: item?.productName,
-          answers: { reason, used, details },
+          answers: { reason, used, details, exchangeSize, exchange: exchangeSize ? 'yes' : 'no' },
           images,
         }),
       });
@@ -122,6 +123,14 @@ export default function ReturnChatbot({
                 {option}
               </button>
             ))}
+            {reason === 'Wrong size/fit' && (
+              <input
+                className="w-full px-3 py-2 border rounded-xl text-sm"
+                placeholder="Exchange size / variant"
+                value={exchangeSize}
+                onChange={(event) => setExchangeSize(event.target.value)}
+              />
+            )}
             <Button onClick={() => setStep(2)} disabled={!reason}>Continue</Button>
           </div>
         )}
