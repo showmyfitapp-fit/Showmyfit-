@@ -74,6 +74,8 @@ export interface OrderRecord {
   cancelReason?: string;
   tax?: number;
   fees?: number;
+  paymentFee?: number;
+  couponCode?: string;
   subtotal: number;
   discount: number;
   shipping: number;

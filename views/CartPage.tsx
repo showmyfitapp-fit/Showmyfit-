@@ -27,8 +27,10 @@ import {
   createOrdersFromCart,
   fetchSellerShopInfo,
   groupCartBySeller,
+  quoteGroupedCart,
 } from '@/lib/orders';
-import { applyCoupon, isOutsideDeliveryRadius } from '@/lib/ops/rules';
+import { isOutsideDeliveryRadius } from '@/lib/ops/rules';
+import { apiRequest } from '@/lib/api/browser';
 
 const CartPage: React.FC = () => {
   const {
@@ -55,7 +57,10 @@ const CartPage: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
-  const [couponCode, setCouponCode] = useState('');
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
   const promptedLocationRef = useRef(false);
 
   useEffect(() => {
@@ -119,12 +124,27 @@ const CartPage: React.FC = () => {
     fetchShopDetails();
   }, [cartItems, customerLocation]);
 
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.originalPrice || item.price) * item.quantity, 0);
-  const discount = cartItems.reduce((sum, item) => sum + ((item.originalPrice || item.price) - item.price) * item.quantity, 0);
-  const shipping = 0; // Free shipping for now
-  const merchandiseTotal = subtotal - discount + shipping;
-  const coupon = applyCoupon(merchandiseTotal, couponCode);
-  const total = coupon.amount;
+  const groups = groupCartBySeller(cartItems);
+  const { combined: quote } = quoteGroupedCart(groups, appliedCoupon, paymentMethod);
+  const subtotal = quote.subtotal;
+  const discount = quote.itemDiscount;
+  const total = quote.total;
+
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    let cancelled = false;
+    apiRequest<{ code: string }>('/api/coupons/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code: appliedCoupon, amount: quote.merchandise }),
+    }).catch((error) => {
+      if (cancelled) return;
+      setAppliedCoupon('');
+      setCouponError(error instanceof Error ? error.message : 'This coupon is no longer valid.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCoupon, quote.merchandise]);
 
   // Handle checkout with Razorpay
   const handleCheckout = async () => {
@@ -173,7 +193,7 @@ const CartPage: React.FC = () => {
               lng: location.selectedAddress.longitude,
             }
           : null,
-      couponCode: coupon.code,
+      couponCode: appliedCoupon,
     };
 
     if (paymentMethod === 'cod') {
@@ -221,8 +241,13 @@ const CartPage: React.FC = () => {
           amount: total,
           currency: 'INR',
           receipt: receipt,
-          coupon: coupon.code,
-          items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity })),
+          coupon: appliedCoupon,
+          paymentMethod: 'razorpay',
+          items: cartItems.map((item) => ({
+            productId: item.id,
+            quantity: item.quantity,
+            size: item.size,
+          })),
         }),
       });
 
@@ -465,7 +490,7 @@ const CartPage: React.FC = () => {
 
               {cartItems.map((item, index) => (
                 <div
-                  key={item.id}
+                  key={`${item.id}-${item.size || ''}-${item.color || ''}`}
                   className="group bg-white p-5 md:p-6 rounded-2xl border border-gray-100 hover:border-purple-200 hover:shadow-xl transition-all duration-300"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
@@ -531,7 +556,7 @@ const CartPage: React.FC = () => {
                         </div>
 
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(item.id, item.size, item.color)}
                           className="w-9 h-9 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -542,14 +567,14 @@ const CartPage: React.FC = () => {
                         {/* Quantity */}
                         <div className="flex items-center h-11 px-2 bg-gray-50 rounded-xl border border-gray-100">
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, item.color)}
                             className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white transition-all text-gray-900"
                           >
                             <Minus className="w-4 h-4" strokeWidth={2.5} />
                           </button>
                           <span className="text-sm font-black w-10 text-center text-gray-900">{item.quantity}</span>
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, item.color)}
                             className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white transition-all text-gray-900"
                           >
                             <Plus className="w-4 h-4" strokeWidth={2.5} />
@@ -695,7 +720,7 @@ const CartPage: React.FC = () => {
                     />
                   </div>
 
-                  {Object.entries(groupCartBySeller(cartItems)).map(([sellerId, items]) => {
+                  {Object.entries(groups).map(([sellerId, items]) => {
                     const shop = shopDetails[sellerId];
                     if (!shop) return null;
                     return (
@@ -715,45 +740,88 @@ const CartPage: React.FC = () => {
                   })}
 
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">Subtotal</span>
+                    <span className="text-gray-600 font-medium">Items</span>
                     <span className="text-gray-900 font-bold">₹{subtotal.toLocaleString()}</span>
                   </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 font-medium">Item discounts</span>
+                      <span className="text-green-700 font-bold">−₹{discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {quote.couponDiscount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 font-medium">Coupon ({quote.couponCode})</span>
+                      <span className="text-green-700 font-bold">−₹{quote.couponDiscount.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">Tax</span>
-                    <span className="text-gray-900 font-bold">₹0</span>
+                    <span className="text-gray-600 font-medium">Delivery</span>
+                    <span className="text-gray-900 font-bold">₹{quote.shipping.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">Fees</span>
-                    <span className="text-gray-900 font-bold">₹0</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">Shipping</span>
-                    <span className="text-green-600 text-sm font-black uppercase tracking-wide flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      FREE
+                    <span className="text-gray-600 font-medium">Payment processing fee (2.5%)</span>
+                    <span className="text-gray-900 font-bold">
+                      {paymentMethod === 'cod' ? '₹0' : `₹${quote.paymentFee.toLocaleString()}`}
                     </span>
                   </div>
+                  {paymentMethod !== 'cod' && (
+                    <p className="text-xs text-gray-500">
+                      This fee is 2.5% of the item total after discounts and is shown before you pay.
+                    </p>
+                  )}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
                       Coupon
                     </label>
-                    <input
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
-                      placeholder="LAUNCH10"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-medium"
-                    />
-                    {coupon.discount > 0 && (
-                      <p className="text-xs text-green-700 mt-1">Coupon applied: −₹{coupon.discount}</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={couponInput}
+                        onChange={(e) => {
+                          setCouponInput(e.target.value);
+                          setCouponError('');
+                        }}
+                        placeholder="LAUNCH10"
+                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm font-medium"
+                      />
+                      <button
+                        type="button"
+                        disabled={couponBusy}
+                        onClick={async () => {
+                          const code = couponInput.trim();
+                          if (!code) {
+                            setAppliedCoupon('');
+                            setCouponError('');
+                            return;
+                          }
+                          setCouponBusy(true);
+                          try {
+                            const result = await apiRequest<{ code: string }>(
+                              '/api/coupons/validate',
+                              {
+                                method: 'POST',
+                                body: JSON.stringify({ code, amount: quote.merchandise }),
+                              }
+                            );
+                            setAppliedCoupon(result.code);
+                            setCouponError('');
+                          } catch (error) {
+                            setAppliedCoupon('');
+                            setCouponError(error instanceof Error ? error.message : 'Invalid coupon');
+                          } finally {
+                            setCouponBusy(false);
+                          }
+                        }}
+                        className="px-4 py-3 rounded-xl bg-gray-900 text-white text-xs font-black uppercase"
+                      >
+                        {couponBusy ? '…' : 'Apply'}
+                      </button>
+                    </div>
+                    {couponError && <p className="text-xs text-red-600 mt-1">{couponError}</p>}
+                    {quote.couponDiscount > 0 && (
+                      <p className="text-xs text-green-700 mt-1">Coupon applied: −₹{quote.couponDiscount}</p>
                     )}
                   </div>
-
-                  {discount > 0 && (
-                    <div className="flex justify-between items-center bg-green-50 p-4 rounded-xl border border-green-100">
-                      <span className="text-green-700 font-bold uppercase text-xs tracking-wide">Savings</span>
-                      <span className="text-green-700 font-black">-₹{discount.toLocaleString()}</span>
-                    </div>
-                  )}
 
                   <div className="pt-4 border-t border-gray-100">
                     <div className="flex justify-between items-baseline">

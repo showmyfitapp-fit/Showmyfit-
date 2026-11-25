@@ -22,6 +22,7 @@ import {
 } from '@/lib/orders';
 import { subscribeTable } from '@/lib/realtime/subscribe';
 import ReturnChatbot from '@/components/orders/ReturnChatbot';
+import OrderTimeline from '@/components/orders/OrderTimeline';
 import { apiRequest } from '@/lib/api/browser';
 
 const statusColor = (status: string) => {
@@ -48,6 +49,7 @@ const CustomerOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [returnOrder, setReturnOrder] = useState<OrderRecord | null>(null);
+  const [returns, setReturns] = useState<any[]>([]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -58,6 +60,9 @@ const CustomerOrdersPage: React.FC = () => {
         .finally(() => setLoading(false));
     };
     load();
+    apiRequest<{ returns: any[] }>('/api/returns')
+      .then((data) => setReturns(data.returns || []))
+      .catch(() => setReturns([]));
     return subscribeTable({
       channel: `customer-orders-${currentUser.uid}`,
       table: 'orders',
@@ -147,22 +152,25 @@ const CustomerOrdersPage: React.FC = () => {
                     )}
                     <p className="font-bold text-gray-900 text-base">₹{order.total.toLocaleString()}</p>
                     <p className="text-xs text-gray-500">{paymentStatusLabel(order)}</p>
-                    <ol className="text-xs text-gray-500 space-y-1">
-                      {[
-                        order.placedAt && `Order Placed · ${order.placedAt.toLocaleString()}`,
-                        order.acceptedAt && 'Seller Accepted',
-                        order.packedAt && 'Ready for Pickup',
-                        order.outForDeliveryAt && 'Out for Delivery',
-                        order.deliveredAt && 'Delivered',
-                        order.status === 'return_requested' && 'Return Requested',
-                        order.status === 'returned' && 'Returned',
-                        order.status === 'cancelled' && 'Cancelled',
-                      ]
-                        .filter(Boolean)
-                        .map((step) => (
-                          <li key={String(step)}>{step}</li>
-                        ))}
-                    </ol>
+                    <OrderTimeline order={order} />
+                    {returns
+                      .filter((row) => row.order_id === order.id)
+                      .map((row) => (
+                        <div key={row.id} className="mt-2 text-xs bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1">
+                          <p className="font-bold text-amber-900">
+                            Return {String(row.status || '').replaceAll('_', ' ')}
+                            {row.product_name ? ` · ${row.product_name}` : ''}
+                          </p>
+                          {row.customer_message && <p className="text-amber-800">{row.customer_message}</p>}
+                          {row.rejection_reason && <p className="text-red-700">{row.rejection_reason}</p>}
+                          {order.refundAmount != null && (
+                            <p>
+                              Refund ₹{Number(order.refundAmount).toLocaleString()} via original payment method
+                              {order.paymentStatus === 'refunded' ? ' · completed' : ' · processing'}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                   </div>
 
                   <div className="space-y-2">
@@ -204,9 +212,14 @@ const CustomerOrdersPage: React.FC = () => {
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2 mt-4">
-                    {order.status === 'delivered' && (
+                    {order.status === 'delivered' &&
+                      !returns.some(
+                        (row) =>
+                          row.order_id === order.id &&
+                          !['rejected', 'completed'].includes(row.status)
+                      ) && (
                       <Button variant="outline" onClick={() => setReturnOrder(order)}>
-                        Return item
+                        Request return
                       </Button>
                     )}
                     {order.status === 'delivered' && (
@@ -272,7 +285,12 @@ const CustomerOrdersPage: React.FC = () => {
           <ReturnChatbot
             order={returnOrder}
             onClose={() => setReturnOrder(null)}
-            onSubmitted={setMessage}
+            onSubmitted={(message) => {
+              setMessage(message);
+              apiRequest<{ returns: any[] }>('/api/returns')
+                .then((data) => setReturns(data.returns || []))
+                .catch(() => undefined);
+            }}
           />
         )}
       </div>

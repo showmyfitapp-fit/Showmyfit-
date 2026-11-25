@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, isAdminEmail, resolveAccountKeys } from '@/lib/server/request-user';
+import { availableStockFor } from '@/lib/products/variants';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
       orderId?: string;
       productId?: string;
       productName?: string;
+      quantity?: number;
       answers?: Record<string, string>;
       images?: string[];
     };
@@ -54,10 +56,14 @@ export async function POST(request: NextRequest) {
     if (body.answers.exchangeSize && body.productId) {
       const { data: product } = await getSupabaseAdminClient()
         .from('products')
-        .select('id, stock')
+        .select('id, stock, category_specific_data')
         .eq('id', body.productId)
         .maybeSingle();
-      if (!product || Number(product.stock || 0) < 1) {
+      const mapped = {
+        stock: Number(product?.stock || 0),
+        categorySpecificData: (product?.category_specific_data || {}) as Record<string, unknown>,
+      };
+      if (!product || availableStockFor(mapped, body.answers.exchangeSize) < 1) {
         return NextResponse.json({ error: 'Exchange size/variant is out of stock' }, { status: 409 });
       }
     }
@@ -68,6 +74,25 @@ export async function POST(request: NextRequest) {
     if (order.status !== 'delivered') {
       return NextResponse.json({ error: 'Only delivered items can be returned' }, { status: 400 });
     }
+    const { data: openReturns } = await admin
+      .from('return_requests')
+      .select('id')
+      .eq('order_id', body.orderId)
+      .in('status', ['requested', 'under_review', 'more_info', 'approved', 'pickup_scheduled', 'item_received', 'processing']);
+    if (openReturns?.length) {
+      return NextResponse.json({ error: 'A return is already in progress for this order' }, { status: 409 });
+    }
+    if (body.productId) {
+      const { data: product } = await admin
+        .from('products')
+        .select('id, category_specific_data')
+        .eq('id', body.productId)
+        .maybeSingle();
+      const flags = (product?.category_specific_data || {}) as Record<string, unknown>;
+      if (flags.returnable === false || flags.nonReturnable === true) {
+        return NextResponse.json({ error: 'This product cannot be returned' }, { status: 400 });
+      }
+    }
 
     const deliveredAt = order.delivered_at ? new Date(order.delivered_at) : null;
     if (deliveredAt) {
@@ -77,21 +102,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data, error } = await admin
-      .from('return_requests')
-      .insert({
-        order_id: body.orderId,
-        order_number: order.order_number,
-        product_id: body.productId || null,
-        product_name: body.productName || null,
-        user_id: user.id,
-        seller_id: order.seller_id,
-        status: 'requested',
-        answers: body.answers,
-        images: body.images || [],
-      })
-      .select('id, status')
-      .single();
+    const payload = {
+      order_id: body.orderId,
+      order_number: order.order_number,
+      product_id: body.productId || null,
+      product_name: body.productName || null,
+      user_id: user.id,
+      seller_id: order.seller_id,
+      status: 'requested',
+      answers: { ...body.answers, quantity: Math.max(1, Number(body.quantity || 1)) },
+      images: body.images || [],
+      quantity: Math.max(1, Number(body.quantity || 1)),
+    };
+    let { data, error } = await admin.from('return_requests').insert(payload).select('id, status').single();
+    if (error) {
+      const { quantity: _quantity, ...withoutQuantity } = payload;
+      ({ data, error } = await admin
+        .from('return_requests')
+        .insert(withoutQuantity)
+        .select('id, status')
+        .single());
+    }
     if (error) throw error;
 
     await admin

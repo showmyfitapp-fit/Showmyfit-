@@ -22,6 +22,7 @@ import {
 } from '@/lib/orders';
 import { createPickupJob } from '@/lib/delivery';
 import { subscribeTable } from '@/lib/realtime/subscribe';
+import OrderTimeline from '@/components/orders/OrderTimeline';
 import {
   browserNotificationPermission,
   requestBrowserNotificationPermission,
@@ -242,6 +243,7 @@ const SellerOrdersPage: React.FC = () => {
                           Pack by {order.packByDeadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       )}
+                      <OrderTimeline order={order} />
                       <p className="flex items-center gap-2">
                         <KeyRound className="w-4 h-4" />
                         Pickup code: <strong>{order.pickupCode}</strong>

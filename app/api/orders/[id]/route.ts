@@ -116,6 +116,7 @@ export async function PATCH(
           items.map((item: any) => ({
             productId: item.productId || item.product_id,
             quantity: item.quantity,
+            size: item.size,
           })),
           'release'
         );

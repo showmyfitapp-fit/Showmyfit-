@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
     const stockItems = items.map((item: any) => ({
       productId: item.productId || item.product_id,
       quantity: item.quantity,
+      size: item.size,
     }));
     await adjustProductStock(stockItems, 'reserve');
     const { data, error } = await admin

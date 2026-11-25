@@ -29,8 +29,8 @@ interface CartContextType {
   cartItems: CartItem[];
   lastAddedProducts: LastAddedProduct[];
   addToCart: (product: Omit<CartItem, 'addedAt' | 'quantity'>) => void; // Add items to cart
-  removeFromCart: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  removeFromCart: (id: string, size?: string, color?: string) => void;
+  updateQuantity: (id: string, quantity: number, size?: string, color?: string) => void;
   clearCart: () => void;
   moveToWishlist: (item: CartItem) => void;
   getCartTotal: () => number;
@@ -126,12 +126,19 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     setTimeout(() => setShowAddNotification(false), 3000);
 
     setCartItems(prevItems => {
-      const existingItem = prevItems.find(item => item.id === safeProduct.id);
+      const existingItem = prevItems.find(
+        (item) =>
+          item.id === safeProduct.id &&
+          (item.size || '') === (safeProduct.size || '') &&
+          (item.color || '') === (safeProduct.color || '')
+      );
 
       if (existingItem) {
         // Update quantity if item already exists
         const updatedItems = prevItems.map(item =>
-          item.id === safeProduct.id
+          item.id === safeProduct.id &&
+          (item.size || '') === (safeProduct.size || '') &&
+          (item.color || '') === (safeProduct.color || '')
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -161,20 +168,21 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     setTimeout(() => setIsAddingToCart(false), 500);
   };
 
-  const removeFromCart = (id: string) => {
-    setCartItems(prevItems => prevItems.filter(item => item.id !== id));
+  const sameLine = (item: CartItem, id: string, size?: string, color?: string) =>
+    item.id === id && (item.size || '') === (size || '') && (item.color || '') === (color || '');
+
+  const removeFromCart = (id: string, size?: string, color?: string) => {
+    setCartItems((prevItems) => prevItems.filter((item) => !sameLine(item, id, size, color)));
   };
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = (id: string, quantity: number, size?: string, color?: string) => {
     if (quantity < 1) {
-      removeFromCart(id);
+      removeFromCart(id, size, color);
       return;
     }
 
-    setCartItems(prevItems =>
-      prevItems.map(item =>
-        item.id === id ? { ...item, quantity } : item
-      )
+    setCartItems((prevItems) =>
+      prevItems.map((item) => (sameLine(item, id, size, color) ? { ...item, quantity } : item))
     );
   };
 
@@ -186,7 +194,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     // This function is now handled by the WishlistContext
     // We just remove from cart and let the user add to wishlist separately
     console.log('Moving to wishlist:', item);
-    removeFromCart(item.id);
+    removeFromCart(item.id, item.size, item.color);
   };
 
   const getCartTotal = () => {

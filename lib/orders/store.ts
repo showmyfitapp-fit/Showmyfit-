@@ -48,6 +48,8 @@ export function mapOrderRow(row: Record<string, any>): OrderRecord {
     cancelReason: row.cancel_reason ? String(row.cancel_reason) : undefined,
     tax: Number(row.tax || 0),
     fees: Number(row.fees || 0),
+    paymentFee: Number(row.payment_fee ?? row.tax ?? 0),
+    couponCode: row.coupon_code ? String(row.coupon_code) : undefined,
     subtotal: Number(row.subtotal || 0),
     discount: Number(row.discount || 0),
     shipping: Number(row.shipping || 0),

@@ -6,6 +6,7 @@ import {
   groupCartBySeller,
   type SellerShopInfo,
 } from './helpers';
+import { quoteGroupedCart } from './pricing';
 import { requestOrderAlert } from './alerts';
 import { createOrder } from './store';
 import type { PaymentStatus } from './types';
@@ -40,6 +41,7 @@ export async function createOrdersFromCart(params: {
   const orderGroupId = `grp_${Date.now()}`;
   const groups = groupCartBySeller(params.cartItems);
   const createdOrders: Array<{ id: string; orderNumber: string; sellerId: string }> = [];
+  const { bySeller } = quoteGroupedCart(groups, params.couponCode, params.paymentMethod);
 
   for (const [sellerId, items] of Object.entries(groups)) {
     if (sellerId === 'unknown') continue;
@@ -60,6 +62,7 @@ export async function createOrdersFromCart(params: {
       paymentMethod: params.paymentMethod,
       paymentStatus: params.paymentStatus,
       couponCode: params.couponCode,
+      quote: bySeller[sellerId],
     });
 
     const orderId = await createOrder(draft);

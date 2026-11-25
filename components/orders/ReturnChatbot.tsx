@@ -26,6 +26,7 @@ export default function ReturnChatbot({
 }) {
   const [step, setStep] = useState(0);
   const [item, setItem] = useState<OrderItem | null>(order.items[0] || null);
+  const [quantity, setQuantity] = useState(1);
   const [reason, setReason] = useState('');
   const [used, setUsed] = useState('');
   const [details, setDetails] = useState('');
@@ -65,7 +66,15 @@ export default function ReturnChatbot({
           orderId: order.id,
           productId: item?.productId,
           productName: item?.productName,
-          answers: { reason, used, details, exchangeSize, exchange: exchangeSize ? 'yes' : 'no' },
+          quantity,
+          answers: {
+            reason,
+            used,
+            details,
+            exchangeSize,
+            exchange: exchangeSize ? 'yes' : 'no',
+            size: item?.size || '',
+          },
           images,
         }),
       });
@@ -102,9 +111,33 @@ export default function ReturnChatbot({
                 }`}
               >
                 {entry.productName} × {entry.quantity}
+                {entry.size ? ` · ${entry.size}` : ''}
               </button>
             ))}
-            <Button onClick={() => setStep(1)} disabled={!item}>Continue</Button>
+            {item && item.quantity > 1 && (
+              <label className="block text-xs text-gray-600">
+                Quantity to return
+                <input
+                  type="number"
+                  min={1}
+                  max={item.quantity}
+                  value={quantity}
+                  onChange={(event) =>
+                    setQuantity(Math.min(item.quantity, Math.max(1, Number(event.target.value) || 1)))
+                  }
+                  className="mt-1 w-full px-3 py-2 border rounded-xl text-sm"
+                />
+              </label>
+            )}
+            <Button
+              onClick={() => {
+                setQuantity(Math.min(item?.quantity || 1, Math.max(1, quantity)));
+                setStep(1);
+              }}
+              disabled={!item}
+            >
+              Continue
+            </Button>
           </div>
         )}
 

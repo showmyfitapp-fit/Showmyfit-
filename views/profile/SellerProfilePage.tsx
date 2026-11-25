@@ -62,6 +62,11 @@ import { useCategories } from '@/hooks/useCategories';
 import { getCategorySpecificFields } from '@/lib/categories/categoryFields';
 import { buildProductSeoFields } from '@/utils/productSeo';
 import { getProductPath } from '@/utils/productUrls';
+import {
+  listProductSizes,
+  variantStockTotal,
+  variantsForSizes,
+} from '@/lib/products/variants';
 
 interface Product {
   id?: string;
@@ -934,12 +939,20 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
         productId: editingProduct?.id,
       });
 
+      const sizeNames = listProductSizes(categorySpecificData);
+      const variants = sizeNames.length
+        ? variantsForSizes(sizeNames, categorySpecificData.variants || [], formData.stock)
+        : [];
       const productData = {
         ...formData,
         ...seoFields,
+        stock: variants.length ? variantStockTotal(variants) : formData.stock,
         sellerId: currentUser.uid,
         sellerName: userData?.displayName || currentUser.displayName,
-        categorySpecificData,
+        categorySpecificData: {
+          ...categorySpecificData,
+          ...(variants.length ? { variants } : {}),
+        },
         createdAt: editingProduct ? formData.createdAt : new Date(),
         updatedAt: new Date()
       };
@@ -2475,6 +2488,80 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ currentUser, user
                                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
                                           placeholder="Enter custom sizes separated by commas (e.g., Free Size, One Size, etc.)"
                                         />
+                                      )}
+                                      {key === 'sizes' && listProductSizes(categorySpecificData).length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                          <p className="text-sm font-semibold text-gray-800">Quantity, price, and SKU per size</p>
+                                          {variantsForSizes(
+                                            listProductSizes(categorySpecificData),
+                                            categorySpecificData.variants || [],
+                                            formData.stock
+                                          ).map((row) => (
+                                            <div key={row.size} className="grid grid-cols-4 gap-2 items-center">
+                                              <span className="text-sm font-bold">{row.size}</span>
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={row.stock}
+                                                onChange={(event) => {
+                                                  const next = variantsForSizes(
+                                                    listProductSizes(categorySpecificData),
+                                                    categorySpecificData.variants || [],
+                                                    formData.stock
+                                                  ).map((entry) =>
+                                                    entry.size === row.size
+                                                      ? { ...entry, stock: Math.max(0, Number(event.target.value) || 0) }
+                                                      : entry
+                                                  );
+                                                  setCategorySpecificData({ ...categorySpecificData, variants: next });
+                                                  setFormData({ ...formData, stock: variantStockTotal(next) });
+                                                }}
+                                                className="px-2 py-2 border rounded-lg text-sm"
+                                                placeholder="Qty"
+                                              />
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={row.price ?? ''}
+                                                onChange={(event) => {
+                                                  const value = event.target.value;
+                                                  const next = variantsForSizes(
+                                                    listProductSizes(categorySpecificData),
+                                                    categorySpecificData.variants || [],
+                                                    formData.stock
+                                                  ).map((entry) =>
+                                                    entry.size === row.size
+                                                      ? { ...entry, price: value === '' ? null : Number(value) }
+                                                      : entry
+                                                  );
+                                                  setCategorySpecificData({ ...categorySpecificData, variants: next });
+                                                }}
+                                                className="px-2 py-2 border rounded-lg text-sm"
+                                                placeholder="Price"
+                                              />
+                                              <input
+                                                value={row.sku || ''}
+                                                onChange={(event) => {
+                                                  const next = variantsForSizes(
+                                                    listProductSizes(categorySpecificData),
+                                                    categorySpecificData.variants || [],
+                                                    formData.stock
+                                                  ).map((entry) =>
+                                                    entry.size === row.size
+                                                      ? { ...entry, sku: event.target.value }
+                                                      : entry
+                                                  );
+                                                  setCategorySpecificData({ ...categorySpecificData, variants: next });
+                                                }}
+                                                className="px-2 py-2 border rounded-lg text-sm"
+                                                placeholder="SKU"
+                                              />
+                                            </div>
+                                          ))}
+                                          <p className="text-xs text-gray-500">
+                                            Leave price blank to use the product price. Total stock is the sum of size quantities.
+                                          </p>
+                                        </div>
                                       )}
                                     </div>
                                   ) : currentField.type === 'multi-text' ? (

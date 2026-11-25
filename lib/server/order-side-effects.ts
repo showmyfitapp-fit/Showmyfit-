@@ -1,3 +1,4 @@
+import { applyVariantStockChange, availableStockFor } from '@/lib/products/variants';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin-server';
 
 export async function logOrderEvent(params: {
@@ -45,31 +46,34 @@ export async function logPaymentEvent(params: {
 }
 
 export async function adjustProductStock(
-  items: Array<{ productId?: string; quantity?: number }>,
+  items: Array<{ productId?: string; quantity?: number; size?: string }>,
   direction: 'reserve' | 'release'
 ) {
   const admin = getSupabaseAdminClient();
   for (const item of items) {
     if (!item.productId || !item.quantity) continue;
-    const delta = direction === 'reserve' ? -Math.abs(item.quantity) : Math.abs(item.quantity);
     try {
       const qty = Math.abs(item.quantity);
       const { data } = await admin
         .from('products')
-        .select('id, stock, stock_reserved, stock_sold')
+        .select('id, stock, stock_reserved, stock_sold, category_specific_data')
         .eq('id', item.productId)
         .maybeSingle();
       if (!data) continue;
-      const current = Number(data.stock || 0);
-      if (direction === 'reserve' && current < qty) {
+      const mapped = {
+        stock: Number(data.stock || 0),
+        categorySpecificData: (data.category_specific_data || {}) as Record<string, unknown>,
+      };
+      if (direction === 'reserve' && availableStockFor(mapped, item.size) < qty) {
         throw new Error('One or more items are out of stock');
       }
-      const next = Math.max(0, current + delta);
+      const next = applyVariantStockChange(mapped, item.size, qty, direction);
       const reserved = Math.max(0, Number(data.stock_reserved || 0) + (direction === 'reserve' ? qty : -qty));
       const { data: updated, error } = await admin
         .from('products')
         .update({
-          stock: next,
+          stock: next.stock,
+          category_specific_data: next.categorySpecificData,
           stock_reserved: reserved,
           stock_updated_at: new Date().toISOString(),
         })

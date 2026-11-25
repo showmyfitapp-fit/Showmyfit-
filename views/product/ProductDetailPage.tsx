@@ -24,6 +24,12 @@ import Breadcrumbs from '@/components/common/Breadcrumbs';
 import { useCategories } from '@/hooks/useCategories';
 import { getProductPath } from '@/utils/productUrls';
 import { googleMapsApiKey } from '@/lib/location/googleMaps';
+import {
+  availableStockFor,
+  listProductSizes,
+  readVariants,
+  unitPriceFor,
+} from '@/lib/products/variants';
 
 interface Product {
   id: string;
@@ -320,12 +326,21 @@ const ProductDetailPage: React.FC = () => {
     fetchProduct();
   }, [identifier, router]);
 
+  const sizeOptions = product ? listProductSizes(product.categorySpecificData) : [];
+  const selectedStock = product ? availableStockFor(product, selectedSize || undefined) : 0;
+  const selectedPrice = product ? unitPriceFor(product, selectedSize || undefined) : 0;
+  const hasSizeVariants = sizeOptions.length > 0;
+
   const handleAddToCart = () => {
     if (!product) return;
 
-    // Check if size selection is required
-    if (product.categorySpecificData?.sizes && !selectedSize) {
+    if (hasSizeVariants && !selectedSize) {
       alert('Please select a size before adding to cart');
+      return;
+    }
+
+    if (hasSizeVariants && selectedStock <= 0) {
+      alert('That size is out of stock');
       return;
     }
 
@@ -338,7 +353,7 @@ const ProductDetailPage: React.FC = () => {
     addToCart({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: selectedPrice || product.price,
       originalPrice: product.originalPrice,
       image: primaryImage,
       brand: product.brand,
@@ -351,7 +366,9 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const getProductQuantity = () => {
-    const cartItem = cartItems.find(item => item.id === product?.id);
+    const cartItem = cartItems.find(
+      (item) => item.id === product?.id && (item.size || '') === (selectedSize || '')
+    );
     return cartItem ? cartItem.quantity : 0;
   };
 
@@ -584,7 +601,7 @@ const ProductDetailPage: React.FC = () => {
               </Link>
               <div className="flex flex-col items-end">
                 <span className="text-3xl font-bold text-gray-900 tracking-tight">
-                  ₹{product.price.toLocaleString()}
+                  ₹{(selectedPrice || product.price).toLocaleString()}
                 </span>
                 {product.originalPrice && product.originalPrice > product.price && (
                   <span className="text-sm text-gray-400 line-through decoration-gray-400">
@@ -619,16 +636,16 @@ const ProductDetailPage: React.FC = () => {
               <>
                 <div className="w-full bg-[#0f0f0f] text-white rounded-full h-14 px-6 flex items-center justify-between shadow-xl">
                   <button
-                    onClick={() => updateQuantity(product.id, getProductQuantity() - 1)}
+                    onClick={() => updateQuantity(product.id, getProductQuantity() - 1, selectedSize)}
                     className="p-1 hover:bg-gray-800 rounded-full transition"
                   >
                     <Minus className="w-5 h-5" />
                   </button>
                   <span className="font-bold text-lg">{getProductQuantity()}</span>
                   <button
-                    onClick={() => updateQuantity(product.id, getProductQuantity() + 1)}
+                    onClick={() => updateQuantity(product.id, getProductQuantity() + 1, selectedSize)}
                     className="p-1 hover:bg-gray-800 rounded-full transition"
-                    disabled={getProductQuantity() >= product.stock}
+                    disabled={getProductQuantity() >= selectedStock}
                   >
                     <Plus className="w-5 h-5" />
                   </button>
@@ -643,11 +660,15 @@ const ProductDetailPage: React.FC = () => {
             ) : (
               <button
                 onClick={handleAddToCart}
-                disabled={product.stock <= 0}
+                disabled={selectedStock <= 0 || (hasSizeVariants && !selectedSize)}
                 className="w-full bg-[#0f0f0f] text-white rounded-full h-14 font-bold text-lg shadow-xl hover:shadow-2xl hover:bg-black transform hover:scale-[1.01] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingBag className="w-5 h-5" />
-                {product.stock <= 0 ? 'Out of Stock' : 'Buy Now'}
+                {hasSizeVariants && !selectedSize
+                  ? 'Select size'
+                  : selectedStock <= 0
+                    ? 'Out of Stock'
+                    : 'Buy Now'}
               </button>
             )}
           </div>
@@ -658,7 +679,7 @@ const ProductDetailPage: React.FC = () => {
           {/* Selections */}
           <div className="space-y-8">
             {/* Size Selector */}
-            {product.categorySpecificData?.sizes && (
+            {hasSizeVariants && (
               <div className="animate-fade-in-up">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-gray-900 text-lg">Select Size</h3>
@@ -670,36 +691,28 @@ const ProductDetailPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  {product.categorySpecificData.sizes.map((size: string) => (
-                    <button
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
-                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold transition-all duration-200 ${selectedSize === size
-                        ? 'border-gray-900 bg-gray-900 text-white shadow-lg scale-110'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-400 hover:scale-105'
+                  {sizeOptions.map((size: string) => {
+                    const stock = availableStockFor(product, size);
+                    const soldOut = readVariants(product).length > 0 && stock <= 0;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        disabled={soldOut}
+                        onClick={() => setSelectedSize(size)}
+                        className={`min-w-[3rem] h-12 px-3 rounded-full border-2 flex flex-col items-center justify-center font-bold transition-all duration-200 ${
+                          soldOut
+                            ? 'border-gray-100 text-gray-300 cursor-not-allowed line-through'
+                            : selectedSize === size
+                              ? 'border-gray-900 bg-gray-900 text-white shadow-lg scale-110'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-400 hover:scale-105'
                         }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                  {/* Custom Sizes Support */}
-                  {product.categorySpecificData.sizeOther &&
-                    product.categorySpecificData.sizeOther.split(',').map((size: string) => {
-                      const s = size.trim();
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => setSelectedSize(s)}
-                          className={`min-w-[3rem] h-12 px-3 rounded-full border-2 flex items-center justify-center font-bold transition-all duration-200 ${selectedSize === s
-                            ? 'border-gray-900 bg-gray-900 text-white shadow-lg'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                            }`}
-                        >
-                          {s}
-                        </button>
-                      );
-                    })
-                  }
+                      >
+                        <span>{size}</span>
+                        {soldOut && <span className="text-[9px] font-semibold no-underline">Out of stock</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -771,7 +784,11 @@ const ProductDetailPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <div className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-md flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
-                          Only {product.stock} left {selectedSize ? `in size ${selectedSize}` : ''}
+                          {selectedStock <= 0
+                            ? selectedSize
+                              ? `Size ${selectedSize} is out of stock`
+                              : 'Out of stock'
+                            : `Only ${selectedStock} left${selectedSize ? ` in size ${selectedSize}` : ''}`}
                         </div>
                         <span className="text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded-md">0.8 MI</span>
                       </div>

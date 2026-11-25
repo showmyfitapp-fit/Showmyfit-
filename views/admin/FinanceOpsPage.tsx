@@ -48,9 +48,21 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
   };
 
   const advanceReturn = async (id: string, status: string) => {
+    const customerMessage =
+      status === 'rejected'
+        ? window.prompt('Customer-facing explanation (required for reject)') || ''
+        : status === 'more_info'
+          ? window.prompt('What extra information should the customer send?') || ''
+          : window.prompt('Optional customer-facing update') || '';
+    const adminNote = window.prompt('Internal admin note (optional)') || '';
     await apiRequest(`/api/returns/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        customerMessage,
+        adminNote,
+        rejectionReason: status === 'rejected' ? customerMessage : undefined,
+      }),
     });
     const data = await apiRequest<{ returns: any[] }>('/api/returns?scope=all');
     setReturns(data.returns || []);
@@ -164,12 +176,38 @@ export default function FinanceOpsPage({ initialTab = 'payments' }: { initialTab
           {returns.map((row) => (
             <div key={row.id} className="bg-white border rounded-xl p-4">
               <p className="font-bold">{row.order_number} · {row.product_name || 'Item'}</p>
-              <p className="text-sm text-gray-600">{row.status} · {row.answers?.reason}</p>
-              <div className="flex gap-2 mt-2">
-                {['under_review', 'approved', 'rejected', 'pickup_scheduled', 'item_received', 'processing', 'completed']
-                  .filter((status) => status !== row.status)
-                  .slice(0, 2)
-                  .map((status) => (
+              <p className="text-sm text-gray-600">
+                {row.status} · {row.answers?.reason} · qty {row.quantity || 1}
+              </p>
+              {row.answers?.details && <p className="text-sm text-gray-700 mt-1">{row.answers.details}</p>}
+              {row.reviewed_at && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Reviewed {new Date(row.reviewed_at).toLocaleString()}
+                  {row.reviewed_by ? ` · ${row.reviewed_by}` : ''}
+                </p>
+              )}
+              {row.admin_note && <p className="text-xs text-gray-500">Internal: {row.admin_note}</p>}
+              {row.customer_message && <p className="text-xs text-purple-800">Customer: {row.customer_message}</p>}
+              {Array.isArray(row.images) && row.images.length > 0 && (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {row.images.map((src: string) => (
+                    <a key={src} href={src} target="_blank" rel="noreferrer">
+                      <img src={src} alt="" className="w-14 h-14 object-cover rounded-lg border" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {({
+                  requested: ['under_review', 'more_info', 'rejected'],
+                  under_review: ['approved', 'more_info', 'rejected'],
+                  more_info: ['under_review', 'rejected'],
+                  approved: ['pickup_scheduled', 'rejected'],
+                  pickup_scheduled: ['item_received'],
+                  item_received: ['processing', 'rejected'],
+                  processing: ['completed'],
+                }[row.status as string] || [])
+                  .map((status: string) => (
                     <Button key={status} size="sm" variant="outline" onClick={() => advanceReturn(row.id, status)}>
                       {status.replaceAll('_', ' ')}
                     </Button>

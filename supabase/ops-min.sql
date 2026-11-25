@@ -9,6 +9,13 @@ alter table public.products add column if not exists stock_updated_at timestampt
 alter table public.products add column if not exists low_stock_threshold integer default 3;
 
 alter table public.return_requests add column if not exists inspection_outcome text;
+alter table public.return_requests add column if not exists quantity integer default 1;
+alter table public.return_requests add column if not exists reviewed_by text;
+alter table public.return_requests add column if not exists reviewed_at timestamptz;
+alter table public.return_requests add column if not exists admin_note text;
+alter table public.return_requests add column if not exists customer_message text;
+alter table public.orders add column if not exists payment_fee numeric default 0;
+alter table public.orders add column if not exists coupon_code text;
 
 alter table public.support_tickets add column if not exists evidence jsonb default '[]'::jsonb;
 alter table public.support_tickets add column if not exists sla_due_at timestamptz;

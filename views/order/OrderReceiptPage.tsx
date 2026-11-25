@@ -31,9 +31,10 @@ export default function OrderReceiptPage() {
         ))}
       </div>
       <div className="mt-4 border-t pt-3 text-sm space-y-1">
-        <p>Subtotal ₹{order.subtotal.toLocaleString()}</p>
-        <p>Discount ₹{order.discount.toLocaleString()}</p>
-        <p>Tax ₹{Number(order.tax || 0).toLocaleString()} · Fees ₹{Number(order.fees || 0).toLocaleString()}</p>
+        <p>Items ₹{order.subtotal.toLocaleString()}</p>
+        <p>Discounts / coupon ₹{order.discount.toLocaleString()}</p>
+        <p>Delivery ₹{order.shipping.toLocaleString()}</p>
+        <p>Payment processing fee ₹{Number(order.paymentFee ?? order.tax ?? 0).toLocaleString()}</p>
         <p className="font-black text-lg">Total ₹{order.total.toLocaleString()}</p>
         <p className="text-xs text-gray-500">
           {order.paymentMethod} · {order.paymentStatus}

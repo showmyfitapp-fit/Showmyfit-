@@ -1,7 +1,8 @@
 import { estimateDeliveryMinutes, getDistance } from '@/utils/distance';
 import type { CartItem } from '@/contexts/CartContext';
 import type { GeoPoint, OrderItem, OrderRecord, PaymentStatus, StoreLocation } from './types';
-import { applyCoupon, deliveryFeeFor, sellerPayout } from '@/lib/ops/rules';
+import { sellerPayout } from '@/lib/ops/rules';
+import { quoteCheckout } from './pricing';
 
 const PACK_SLA_MINUTES = 30;
 
@@ -85,25 +86,28 @@ export function buildOrderDraft(params: {
   paymentMethod?: string;
   paymentStatus?: PaymentStatus;
   couponCode?: string;
+  quote?: {
+    subtotal: number;
+    discount: number;
+    shipping: number;
+    paymentFee: number;
+    total: number;
+    couponCode?: string;
+  };
 }): Omit<OrderRecord, 'id'> {
-  const subtotal = params.items.reduce(
-    (sum, item) => sum + (item.originalPrice || item.price) * item.quantity,
-    0
-  );
-  const discount = params.items.reduce(
-    (sum, item) => sum + ((item.originalPrice || item.price) - item.price) * item.quantity,
-    0
-  );
-  const merchandise = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const coupon = applyCoupon(merchandise, params.couponCode);
+  const paymentMethod = params.paymentMethod || 'razorpay';
+  const computed = quoteCheckout({
+    lines: params.items,
+    couponCode: params.couponCode,
+    paymentMethod,
+    shippingUnits: 1,
+  });
+  const quote = params.quote || computed;
   const { distanceKm, etaMinutes } = computeDistanceAndEta(
     params.customerLocation,
     params.seller.storeLocation
   );
-  const shipping = deliveryFeeFor(distanceKm);
-  const total = coupon.amount + shipping;
-  const payout = sellerPayout(total);
-  const paymentMethod = params.paymentMethod || 'razorpay';
+  const payout = sellerPayout(quote.total);
   const now = new Date();
   const packByDeadline = new Date(now.getTime() + PACK_SLA_MINUTES * 60 * 1000);
 
@@ -131,12 +135,14 @@ export function buildOrderDraft(params: {
     paymentAttemptId: params.paymentId
       ? `att_${params.paymentId}`
       : `att_${params.orderGroupId}_${Date.now()}`,
-    subtotal,
-    discount: discount + coupon.discount,
-    shipping,
-    tax: 0,
+    subtotal: quote.subtotal,
+    discount: quote.discount,
+    shipping: quote.shipping,
+    tax: quote.paymentFee,
+    paymentFee: quote.paymentFee,
+    couponCode: quote.couponCode || params.couponCode,
     fees: payout.commission,
-    total,
+    total: quote.total,
     distanceKm,
     etaMinutes,
     customerLocation: params.customerLocation || null,
